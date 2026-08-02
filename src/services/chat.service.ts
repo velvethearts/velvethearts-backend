@@ -16,11 +16,15 @@ export class ChatService {
       const partner = partnerParticipant?.user;
       const prof = partner?.profile;
 
-      const lastMsg = c.messages[0] || null;
+      const clearedAt = userParticipant?.clearedAt ? new Date(userParticipant.clearedAt) : null;
+      const visibleMessages = clearedAt
+        ? c.messages.filter((m: any) => new Date(m.createdAt) > clearedAt)
+        : c.messages;
+      const lastMsg = visibleMessages[0] || null;
       
       // Calculate unread count (messages sent by partner after user's lastReadAt)
       const lastRead = userParticipant?.lastReadAt || new Date(0);
-      const unread = c.messages.filter(
+      const unread = visibleMessages.filter(
         (m: any) => m.senderId !== userId && new Date(m.createdAt) > new Date(lastRead)
       ).length;
 
@@ -33,7 +37,7 @@ export class ChatService {
         lastMessageTime: lastMsg ? lastMsg.createdAt : c.updatedAt,
         unreadCount: unread,
       };
-    });
+    }).filter((c) => c.lastMessage);
   }
 
   async getMessages(conversationId: string, userId: string, limit = 50, page = 1) {
@@ -43,8 +47,15 @@ export class ChatService {
     const isMember = conversation.participants.some((p) => p.userId === userId);
     if (!isMember) throw new Error('Unauthorized chat query');
 
+    const participant = conversation.participants.find((p) => p.userId === userId);
+
     // Fetch messages
-    const messages = await this.chatRepository.findMessagesByConversation(conversationId, limit, page);
+    const messages = await this.chatRepository.findMessagesByConversation(
+      conversationId,
+      participant?.clearedAt,
+      limit,
+      page
+    );
 
     // Update last read receipt for user
     await this.chatRepository.updateLastRead(conversationId, userId);
@@ -111,7 +122,23 @@ export class ChatService {
       throw new Error('Unauthorized message delete action');
     }
 
-    await this.chatRepository.softDeleteMessage(messageId);
+    const deleted = await this.chatRepository.softDeleteMessage(messageId);
+    return {
+      success: true,
+      messageId: deleted.id,
+      conversationId: deleted.conversationId,
+      senderId: deleted.senderId,
+    };
+  }
+
+  async deleteConversationMessages(conversationId: string, userId: string) {
+    const conversation = await this.chatRepository.findConversationById(conversationId);
+    if (!conversation) throw new Error('Conversation not found');
+
+    const isMember = conversation.participants.some((p) => p.userId === userId);
+    if (!isMember) throw new Error('Unauthorized conversation delete action');
+
+    await this.chatRepository.clearConversationForUser(conversationId, userId);
     return { success: true };
   }
 

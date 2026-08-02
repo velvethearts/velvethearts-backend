@@ -76,6 +76,7 @@ router.post('/safety/reports', requireAuth, reportRateLimiter, safetyCtrl.report
 router.get('/chat/conversations', requireAuth,  chatCtrl.getConversations);
 router.get('/chat/conversations/:conversationId/messages', requireAuth, chatCtrl.getMessages);
 router.post('/chat/conversations/:conversationId/messages', requireAuth,  chatRateLimiter, chatCtrl.sendMessage);
+router.delete('/chat/conversations/:conversationId/messages', requireAuth, chatCtrl.deleteConversationMessages);
 router.put('/chat/messages/:messageId', requireAuth, chatRateLimiter, chatCtrl.editMessage);
 router.delete('/chat/messages/:messageId', requireAuth, chatCtrl.deleteMessage);
 router.post('/chat/conversations/:conversationId/seen', requireAuth,  chatCtrl.markSeen);

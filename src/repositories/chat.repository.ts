@@ -64,7 +64,7 @@ export class ChatRepository {
         },
         messages: {
           orderBy: { createdAt: 'desc' },
-          take: 1,
+          take: 25,
         },
       },
       orderBy: {
@@ -129,10 +129,13 @@ export class ChatRepository {
     });
   }
 
-  async findMessagesByConversation(conversationId: string, limit = 50, page = 1): Promise<any[]> {
+  async findMessagesByConversation(conversationId: string, clearedAt?: Date | null, limit = 50, page = 1): Promise<any[]> {
     const skip = (page - 1) * limit;
     return prisma.message.findMany({
-      where: { conversationId },
+      where: {
+        conversationId,
+        ...(clearedAt ? { createdAt: { gt: clearedAt } } : {}),
+      },
       include: {
         attachments: true,
         reactions: true,
@@ -171,6 +174,44 @@ export class ChatRepository {
       data: {
         isDeleted: true,
         deletedAt: new Date(),
+      },
+    });
+  }
+
+  async softDeleteUserMessagesInConversation(conversationId: string, senderId: string): Promise<{ count: number }> {
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.message.updateMany({
+        where: {
+          conversationId,
+          senderId,
+          isDeleted: false,
+        },
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
+        },
+      });
+
+      await tx.conversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date() },
+      });
+
+      return { count: result.count };
+    });
+  }
+
+  async clearConversationForUser(conversationId: string, userId: string): Promise<ConversationParticipant> {
+    return prisma.conversationParticipant.update({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId,
+        },
+      },
+      data: {
+        clearedAt: new Date(),
+        lastReadAt: new Date(),
       },
     });
   }

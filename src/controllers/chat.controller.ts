@@ -164,7 +164,13 @@ export class ChatController {
       }
 
       const { messageId } = req.params;
-      await this.chatService.deleteMessage(messageId, req.user.userId);
+      const result = await this.chatService.deleteMessage(messageId, req.user.userId);
+
+      io.to(result.conversationId).emit('message_deleted', {
+        conversationId: result.conversationId,
+        messageId: result.messageId,
+        senderId: result.senderId,
+      });
 
       return res.status(200).json({
         success: true,
@@ -173,6 +179,30 @@ export class ChatController {
     } catch (error: any) {
       logger.error('deleteMessage controller failure:', error);
       return res.status(500).json({ success: false, message: error.message || 'Deleting message failed' });
+    }
+  };
+
+  deleteConversationMessages = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { conversationId } = req.params;
+      const result = await this.chatService.deleteConversationMessages(conversationId, req.user.userId);
+
+      io.to(req.user.userId).emit('conversation_cleared', {
+        conversationId,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Chat messages deleted successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      logger.error('deleteConversationMessages controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Deleting chat failed' });
     }
   };
 
