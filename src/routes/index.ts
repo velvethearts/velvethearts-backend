@@ -63,6 +63,7 @@ router.post('/match/like', requireAuth,  likeRateLimiter, matchCtrl.like);
 router.post('/match/unlike', requireAuth,  matchCtrl.unlike);
 router.post('/match/unmatch', requireAuth,  matchCtrl.unmatch);
 router.get('/match/connections', requireAuth,  matchCtrl.getConnections);
+router.get('/match/received-invites', requireAuth, matchCtrl.getReceivedInvites);
 
 // ==========================================
 // SAFETY ROUTES (BLOCK & REPORT)

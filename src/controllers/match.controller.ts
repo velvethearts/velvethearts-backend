@@ -104,4 +104,22 @@ export class MatchController {
       return res.status(500).json({ success: false, message: error.message || 'Retrieving connections failed' });
     }
   };
+
+  getReceivedInvites = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const invites = await this.matchService.getReceivedInvites(req.user.userId);
+
+      return res.status(200).json({
+        success: true,
+        data: invites,
+      });
+    } catch (error: any) {
+      logger.error('getReceivedInvites controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Retrieving received invites failed' });
+    }
+  };
 }

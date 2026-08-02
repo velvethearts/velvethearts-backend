@@ -1,7 +1,7 @@
 import { LikeRepository } from '../repositories/like.repository';
 import { MatchRepository } from '../repositories/match.repository';
 import { ActivityLogRepository } from '../repositories/activity-log.repository';
-import { NotificationType } from '@prisma/client';
+import { ApprovalStatus, NotificationType, UserStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { io } from '../socket'; 
 
@@ -294,6 +294,89 @@ export class MatchService {
         verified: partner.approvalStatus === 'APPROVED',
         isPremium: prof?.isPremium || false,
         createdAt: m.createdAt,
+      };
+    });
+  }
+
+  async getReceivedInvites(userId: string) {
+    const sentLikes = await this.likeRepository.findSentLikesByUser(userId);
+    const activeMatches = await this.matchRepository.findActiveMatchesByUser(userId);
+    const excludedSenderIds = new Set<string>(sentLikes.map((like) => like.receiverId));
+
+    activeMatches.forEach((match) => {
+      excludedSenderIds.add(match.user1Id === userId ? match.user2Id : match.user1Id);
+    });
+
+    const receivedLikes = await prisma.like.findMany({
+      where: {
+        receiverId: userId,
+        senderId: {
+          notIn: Array.from(excludedSenderIds),
+        },
+        sender: {
+          status: UserStatus.ACTIVE,
+          approvalStatus: ApprovalStatus.APPROVED,
+          profile: {
+            isNot: null,
+          },
+        },
+      },
+      include: {
+        sender: {
+          include: {
+            profile: {
+              include: {
+                photos: {
+                  orderBy: { photoOrder: 'asc' },
+                },
+                promptAnswers: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return receivedLikes.map((like) => {
+      const user = like.sender;
+      const prof = user.profile!;
+      const dobDate = new Date(prof.dob);
+      const today = new Date();
+      let age = today.getFullYear() - dobDate.getFullYear();
+      const mDiff = today.getMonth() - dobDate.getMonth();
+      if (mDiff < 0 || (mDiff === 0 && today.getDate() < dobDate.getDate())) {
+        age--;
+      }
+
+      return {
+        id: user.id,
+        inviteId: like.id,
+        invitedAt: like.createdAt,
+        name: prof.name,
+        age,
+        city: prof.city,
+        gender: prof.gender,
+        showGender: prof.showGender,
+        orientation: prof.orientation,
+        showOrientation: prof.showOrientation,
+        relationshipIntent: prof.relationshipIntent,
+        relationshipStatus: prof.relationshipStatus,
+        interests: prof.interests,
+        languages: prof.languages || [],
+        education: prof.education || '',
+        occupation: prof.occupation || '',
+        story: prof.story,
+        hasDisability: prof.hasDisability,
+        disabilityInfo: prof.disabilityInfo,
+        showDisability: prof.showDisability,
+        verified: user.approvalStatus === ApprovalStatus.APPROVED,
+        isPremium: prof.isPremium,
+        photo: prof.photos[0]?.secureUrl || '',
+        photos: prof.photos.map((p) => p.secureUrl),
+        promptAnswers: prof.promptAnswers,
       };
     });
   }
