@@ -1,0 +1,107 @@
+import { Response } from 'express';
+import { AuthenticatedRequest } from '../middlewares/auth.middleware';
+import { MatchService } from '../services/match.service';
+import { logger } from '../utils/logger';
+import { z } from 'zod';
+
+const likeSchema = z.object({
+  receiverId: z.string().uuid('Invalid profile user ID'),
+});
+
+const unmatchSchema = z.object({
+  matchId: z.string().uuid('Invalid match ID'),
+});
+
+export class MatchController {
+  private matchService = new MatchService();
+
+  like = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const result = likeSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ success: false, message: result.error.errors[0].message });
+      }
+
+      const data = await this.matchService.likeProfile(req.user.userId, result.data.receiverId);
+
+      return res.status(200).json({
+        success: true,
+        message: data.match ? "It's a Match!" : 'Interest sent successfully',
+        data,
+      });
+    } catch (error: any) {
+      logger.error('Like profile controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Liking profile failed' });
+    }
+  };
+
+  unlike = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const result = likeSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ success: false, message: result.error.errors[0].message });
+      }
+
+      const data = await this.matchService.unlikeProfile(req.user.userId, result.data.receiverId);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Like undone successfully',
+        data,
+      });
+    } catch (error: any) {
+      logger.error('Unlike profile controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Undoing like failed' });
+    }
+  };
+
+  unmatch = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const result = unmatchSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ success: false, message: result.error.errors[0].message });
+      }
+
+      const data = await this.matchService.unmatch(req.user.userId, result.data.matchId);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Unmatched user successfully',
+        data,
+      });
+    } catch (error: any) {
+      logger.error('Unmatch controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Unmatching failed' });
+    }
+  };
+
+  getConnections = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const connections = await this.matchService.getConnections(req.user.userId);
+
+      return res.status(200).json({
+        success: true,
+        data: connections,
+      });
+    } catch (error: any) {
+      logger.error('getConnections controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Retrieving connections failed' });
+    }
+  };
+}

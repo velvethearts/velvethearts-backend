@@ -1,0 +1,296 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String                    @id @default(uuid())
+  phoneNumber     String
+  email           String?
+  firebaseUid     String?                   @unique
+  role            Role                      @default(USER)
+  approvalStatus  ApprovalStatus            @default(APPROVED)
+  status          UserStatus                @default(ACTIVE)
+  phoneVerified   Boolean                   @default(false)
+  phoneVerifiedAt DateTime?
+  isOnline        Boolean                   @default(false)
+  lastSeenAt      DateTime                  @default(now())
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  deletedAt       DateTime?
+  previousUserId  String?
+  adminActions    ActivityLog[]             @relation("AdminLogs")
+  logs            ActivityLog[]             @relation("UserLogs")
+  blocksReceived  Block[]                   @relation("BlocksReceived")
+  blocksSent      Block[]                   @relation("BlocksSent")
+  conversations   ConversationParticipant[]
+  receivedLikes   Like[]                    @relation("LikesReceived")
+  sentLikes       Like[]                    @relation("LikesSent")
+  matchesAsUser1  Match[]                   @relation("MatchesAsUser1")
+  matchesAsUser2  Match[]                   @relation("MatchesAsUser2")
+  messagesSent    Message[]
+  notifications   Notification[]
+  profile         Profile?
+  reportsReceived Report[]                  @relation("ReportsReceived")
+  reportsSent     Report[]                  @relation("ReportsSent")
+  previousUser    User?                     @relation("UserHistory", fields: [previousUserId], references: [id])
+  nextUsers       User[]                    @relation("UserHistory")
+  settings        UserSettings?
+
+  @@index([phoneNumber, status])
+  @@index([email, status])
+}
+
+model Profile {
+  id                 String         @id @default(uuid())
+  userId             String         @unique
+  name               String
+  dob                DateTime
+  city               String
+  gender             String
+  showGender         Boolean        @default(true)
+  orientation        String
+  showOrientation    Boolean        @default(true)
+  relationshipIntent String
+  relationshipStatus String
+  interests          String[]
+  story              String
+  hasDisability      Boolean        @default(false)
+  disabilityInfo     String?
+  showDisability     Boolean        @default(false)
+  verified           Boolean        @default(false)
+  isPremium          Boolean        @default(false)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  education          String?
+  languages          String[]
+  occupation         String?
+  photos             Photo[]
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promptAnswers      PromptAnswer[]
+
+  @@index([city, gender, relationshipIntent])
+}
+
+model Photo {
+  id                 String   @id @default(uuid())
+  profileId          String
+  cloudinaryPublicId String
+  secureUrl          String
+  width              Int?
+  height             Int?
+  blurHash           String?
+  photoOrder         Int      @default(0)
+  isPrimary          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  profile            Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model PromptAnswer {
+  id             String   @id @default(uuid())
+  profileId      String
+  promptQuestion String
+  answer         String
+  createdAt      DateTime @default(now())
+  profile        Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model UserSettings {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  theme          String   @default("system")
+  reduceMotion   Boolean  @default(false)
+  highContrast   Boolean  @default(false)
+  textSize       String   @default("medium")
+  matchNotifs    Boolean  @default(true)
+  chatNotifs     Boolean  @default(true)
+  interestNotifs Boolean  @default(true)
+  emailNotifs    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Like {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  createdAt  DateTime @default(now())
+  receiver   User     @relation("LikesReceived", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User     @relation("LikesSent", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+}
+
+model Match {
+  id           String        @id @default(uuid())
+  user1Id      String
+  user2Id      String
+  unmatched    Boolean       @default(false)
+  unmatchedAt  DateTime?
+  unmatchedBy  String?
+  createdAt    DateTime      @default(now())
+  conversation Conversation?
+  user1        User          @relation("MatchesAsUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2        User          @relation("MatchesAsUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+}
+
+model Conversation {
+  id           String                    @id @default(uuid())
+  matchId      String?                   @unique
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  match        Match?                    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime     @default(now())
+  joinedAt       DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id             String            @id @default(uuid())
+  conversationId String
+  senderId       String
+  text           String?
+  isDeleted      Boolean           @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  attachments    Attachment[]
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  reactions      MessageReaction[]
+
+  @@index([conversationId, createdAt])
+}
+
+model Attachment {
+  id                 String   @id @default(uuid())
+  messageId          String
+  cloudinaryPublicId String
+  secureUrl          String
+  fileType           FileType @default(IMAGE)
+  fileName           String?
+  fileSize           Int?
+  createdAt          DateTime @default(now())
+  message            Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model Block {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  reason    String?
+  createdAt DateTime @default(now())
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+  blocker   User     @relation("BlocksSent", fields: [blockerId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+}
+
+model Report {
+  id            String       @id @default(uuid())
+  reporterId    String
+  reportedId    String
+  reason        String
+  comment       String?
+  status        ReportStatus @default(PENDING)
+  createdAt     DateTime     @default(now())
+  resolvedAt    DateTime?
+  closedAt      DateTime?
+  internalNotes String?
+  reported      User         @relation("ReportsReceived", fields: [reportedId], references: [id], onDelete: Cascade)
+  reporter      User         @relation("ReportsSent", fields: [reporterId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  content   String
+  isRead    Boolean          @default(false)
+  relatedId String?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  adminId   String?
+  action    String
+  details   String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  admin     User?    @relation("AdminLogs", fields: [adminId], references: [id])
+  user      User?    @relation("UserLogs", fields: [userId], references: [id])
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum UserStatus {
+  ACTIVE
+  DELETED
+  SUSPENDED
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  IGNORED
+}
+
+enum NotificationType {
+  LIKE
+  MATCH
+  MESSAGE
+  SYSTEM
+  REPORT_UPDATE
+  ADMIN_NOTICE
+}
+
+enum FileType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
