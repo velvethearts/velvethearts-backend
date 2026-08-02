@@ -129,13 +129,10 @@ export class ChatRepository {
     });
   }
 
-  async findMessagesByConversation(conversationId: string, clearedAt?: Date | null, limit = 50, page = 1): Promise<any[]> {
+  async findMessagesByConversation(conversationId: string, limit = 50, page = 1): Promise<any[]> {
     const skip = (page - 1) * limit;
     return prisma.message.findMany({
-      where: {
-        conversationId,
-        ...(clearedAt ? { createdAt: { gt: clearedAt } } : {}),
-      },
+      where: { conversationId },
       include: {
         attachments: true,
         reactions: true,
@@ -198,21 +195,6 @@ export class ChatRepository {
       });
 
       return { count: result.count };
-    });
-  }
-
-  async clearConversationForUser(conversationId: string, userId: string): Promise<ConversationParticipant> {
-    return prisma.conversationParticipant.update({
-      where: {
-        conversationId_userId: {
-          conversationId,
-          userId,
-        },
-      },
-      data: {
-        clearedAt: new Date(),
-        lastReadAt: new Date(),
-      },
     });
   }
 }

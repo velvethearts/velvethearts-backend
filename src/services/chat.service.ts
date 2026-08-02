@@ -16,15 +16,11 @@ export class ChatService {
       const partner = partnerParticipant?.user;
       const prof = partner?.profile;
 
-      const clearedAt = userParticipant?.clearedAt ? new Date(userParticipant.clearedAt) : null;
-      const visibleMessages = clearedAt
-        ? c.messages.filter((m: any) => new Date(m.createdAt) > clearedAt)
-        : c.messages;
-      const lastMsg = visibleMessages[0] || null;
+      const lastMsg = c.messages[0] || null;
       
       // Calculate unread count (messages sent by partner after user's lastReadAt)
       const lastRead = userParticipant?.lastReadAt || new Date(0);
-      const unread = visibleMessages.filter(
+      const unread = c.messages.filter(
         (m: any) => m.senderId !== userId && new Date(m.createdAt) > new Date(lastRead)
       ).length;
 
@@ -37,7 +33,7 @@ export class ChatService {
         lastMessageTime: lastMsg ? lastMsg.createdAt : c.updatedAt,
         unreadCount: unread,
       };
-    }).filter((c) => c.lastMessage);
+    });
   }
 
   async getMessages(conversationId: string, userId: string, limit = 50, page = 1) {
@@ -47,15 +43,8 @@ export class ChatService {
     const isMember = conversation.participants.some((p) => p.userId === userId);
     if (!isMember) throw new Error('Unauthorized chat query');
 
-    const participant = conversation.participants.find((p) => p.userId === userId);
-
     // Fetch messages
-    const messages = await this.chatRepository.findMessagesByConversation(
-      conversationId,
-      participant?.clearedAt,
-      limit,
-      page
-    );
+    const messages = await this.chatRepository.findMessagesByConversation(conversationId, limit, page);
 
     // Update last read receipt for user
     await this.chatRepository.updateLastRead(conversationId, userId);
@@ -138,8 +127,8 @@ export class ChatService {
     const isMember = conversation.participants.some((p) => p.userId === userId);
     if (!isMember) throw new Error('Unauthorized conversation delete action');
 
-    await this.chatRepository.clearConversationForUser(conversationId, userId);
-    return { success: true };
+    const result = await this.chatRepository.softDeleteUserMessagesInConversation(conversationId, userId);
+    return { success: true, deletedCount: result.count };
   }
 
   async markSeen(conversationId: string, userId: string) {
