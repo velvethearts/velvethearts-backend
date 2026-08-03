@@ -25,7 +25,7 @@ export class UploadService {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder,
-          resource_type: 'image',
+          resource_type: 'auto',
         },
         (error, result) => {
           if (error) {
@@ -35,8 +35,8 @@ export class UploadService {
             resolve({
               secureUrl: result.secure_url,
               publicId: result.public_id,
-              width: result.width,
-              height: result.height,
+              width: result.width || 0,
+              height: result.height || 0,
             });
           } else {
             reject(new Error('Empty upload result from Cloudinary'));

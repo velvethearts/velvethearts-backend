@@ -8,16 +8,22 @@ export class UploadController {
 
   uploadPhoto = async (req: AuthenticatedRequest, res: Response) => {
     try {
-      if (!req.file) {
+      const file = req.file || (req.files && Array.isArray(req.files) ? req.files[0] : null);
+      if (!file) {
         return res.status(400).json({ success: false, message: 'No file uploaded' });
       }
 
-      const result = await this.uploadService.uploadImage(req.file.buffer);
+      const result = await this.uploadService.uploadImage(file.buffer);
 
       return res.status(200).json({
         success: true,
-        message: 'Photo uploaded successfully',
-        data: result,
+        message: 'File uploaded successfully',
+        data: {
+          ...result,
+          fileName: file.originalname,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+        },
       });
     } catch (error: any) {
       logger.error('Upload controller failure:', error);

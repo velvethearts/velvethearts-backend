@@ -86,7 +86,7 @@ router.post('/chat/conversations/:conversationId/messages', requireAuth,  chatRa
 router.delete('/chat/conversations/:conversationId/messages', requireAuth, chatCtrl.deleteConversationMessages);
 router.put('/chat/messages/:messageId', requireAuth, chatRateLimiter, chatCtrl.editMessage);
 router.delete('/chat/messages/:messageId', requireAuth, chatCtrl.deleteMessage);
-router.post('/chat/conversations/:conversationId/seen', requireAuth,  chatCtrl.markSeen);
+router.post('/chat/conversations/:conversationId/seen', requireAuth, chatCtrl.markSeen);
 router.post('/chat/conversations/:conversationId/delivered', requireAuth, chatCtrl.markDelivered);
 router.post('/chat/conversations/:conversationId/typing', requireAuth, chatCtrl.postTyping);
 router.get('/chat/conversations/:conversationId/typing', requireAuth, chatCtrl.getTyping);
@@ -94,7 +94,7 @@ router.get('/chat/conversations/:conversationId/typing', requireAuth, chatCtrl.g
 // ==========================================
 // UPLOAD ROUTE
 // ==========================================
-router.post('/upload', requireAuth, upload.single('photo'), uploadCtrl.uploadPhoto);
+router.post('/upload', requireAuth, upload.any(), uploadCtrl.uploadPhoto);
 
 // ==========================================
 // NOTIFICATION ROUTES
