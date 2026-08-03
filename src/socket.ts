@@ -41,10 +41,24 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
     }
   });
 
+  const userSocketCounts = new Map<string, number>();
+
   io.on('connection', (socket) => {
     const userId = socket.data.userId;
     socket.join(userId);
     logger.debug(`User ${userId} joined personal room`);
+
+    // Track online status
+    const currentCount = userSocketCounts.get(userId) || 0;
+    userSocketCounts.set(userId, currentCount + 1);
+
+    if (currentCount === 0) {
+      io.emit('user_presence', { userId, isOnline: true });
+    }
+
+    const onlineUserList = Array.from(userSocketCounts.keys());
+    socket.emit('online_users', onlineUserList);
+    io.emit('online_users', onlineUserList);
 
     logger.info(`Socket client connected: ${userId} (${socket.id})`);
 
@@ -87,6 +101,14 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
     });
 
     socket.on('disconnect', () => {
+      const count = userSocketCounts.get(userId) || 1;
+      if (count <= 1) {
+        userSocketCounts.delete(userId);
+        io.emit('user_presence', { userId, isOnline: false });
+        io.emit('online_users', Array.from(userSocketCounts.keys()));
+      } else {
+        userSocketCounts.set(userId, count - 1);
+      }
       logger.info(`Socket client disconnected: ${userId} (${socket.id})`);
     });
   });

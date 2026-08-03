@@ -3,6 +3,7 @@ import { NotificationRepository } from '../repositories/notification.repository'
 import { BlockRepository } from '../repositories/block.repository';
 import { NotificationType } from '@prisma/client';
 import { io } from '../socket';
+import { prisma } from '../config/database';
 
 export class ChatService {
   private chatRepository = new ChatRepository();
@@ -136,7 +137,12 @@ export class ChatService {
   async deleteMessage(messageId: string, userId: string) {
     const message = await this.chatRepository.findMessageById(messageId);
     if (!message) {
-      throw new Error('Message not found');
+      return {
+        success: true,
+        messageId,
+        conversationId: '',
+        senderId: userId,
+      };
     }
 
     if (message.senderId !== userId) {
@@ -152,14 +158,34 @@ export class ChatService {
     };
   }
 
-  async deleteConversationMessages(conversationId: string, userId: string) {
-    const conversation = await this.chatRepository.findConversationById(conversationId);
-    if (!conversation) throw new Error('Conversation not found');
+  async deleteConversationMessages(conversationIdOrPartnerId: string, userId: string) {
+    let conversation = await this.chatRepository.findConversationById(conversationIdOrPartnerId);
+
+    if (!conversation) {
+      // Check if conversationIdOrPartnerId is a target Profile ID or User ID
+      const profile = await prisma.profile.findUnique({ where: { id: conversationIdOrPartnerId } });
+      const targetUserId = profile ? profile.userId : conversationIdOrPartnerId;
+
+      const userConvs = await prisma.conversation.findMany({
+        where: {
+          participants: {
+            some: { userId },
+          },
+        },
+        include: { participants: true },
+      });
+
+      conversation = userConvs.find((c) => c.participants.some((p) => p.userId === targetUserId)) || null;
+    }
+
+    if (!conversation) {
+      return { success: true, deletedCount: 0 };
+    }
 
     const isMember = conversation.participants.some((p) => p.userId === userId);
     if (!isMember) throw new Error('Unauthorized conversation delete action');
 
-    const result = await this.chatRepository.softDeleteUserMessagesInConversation(conversationId, userId);
+    const result = await this.chatRepository.softDeleteUserMessagesInConversation(conversation.id, userId);
     return { success: true, deletedCount: result.count };
   }
 

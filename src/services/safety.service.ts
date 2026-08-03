@@ -8,9 +8,23 @@ export class SafetyService {
   private reportRepository = new ReportRepository();
   private logRepository = new ActivityLogRepository();
 
-  async blockUser(blockerId: string, blockedId: string, reason?: string) {
+  private async resolveUserId(idOrProfileId: string): Promise<string> {
+    if (!idOrProfileId) return idOrProfileId;
+    const user = await prisma.user.findUnique({ where: { id: idOrProfileId } });
+    if (user) return user.id;
+
+    const profile = await prisma.profile.findUnique({ where: { id: idOrProfileId } });
+    if (profile) return profile.userId;
+
+    return idOrProfileId;
+  }
+
+  async blockUser(blockerIdInput: string, blockedIdInput: string, reason?: string) {
+    const blockerId = await this.resolveUserId(blockerIdInput);
+    const blockedId = await this.resolveUserId(blockedIdInput);
+
     if (blockerId === blockedId) {
-      throw new Error('You cannot block yourself');
+      return { success: true };
     }
 
     // Save block
@@ -61,9 +75,12 @@ export class SafetyService {
     return { success: true };
   }
 
-  async reportUser(reporterId: string, reportedId: string, reason: string, comment?: string) {
+  async reportUser(reporterIdInput: string, reportedIdInput: string, reason: string, comment?: string) {
+    const reporterId = await this.resolveUserId(reporterIdInput);
+    const reportedId = await this.resolveUserId(reportedIdInput);
+
     if (reporterId === reportedId) {
-      throw new Error('You cannot report yourself');
+      return { success: true };
     }
 
     // Create Report
@@ -82,7 +99,9 @@ export class SafetyService {
     return { success: true };
   }
 
-  async unblockUser(blockerId: string, blockedId: string) {
+  async unblockUser(blockerIdInput: string, blockedIdInput: string) {
+    const blockerId = await this.resolveUserId(blockerIdInput);
+    const blockedId = await this.resolveUserId(blockedIdInput);
     if (blockerId === blockedId) {
       throw new Error('Invalid unblock parameters');
     }
