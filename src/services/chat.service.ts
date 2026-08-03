@@ -26,11 +26,12 @@ export class ChatService {
         const partner = partnerParticipant?.user;
         const prof = partner?.profile;
 
-        const lastMsg = c.messages[0] || null;
+        const activeMessages = c.messages.filter((m: any) => !m.isDeleted);
+        const lastMsg = activeMessages[0] || null;
         
         // Calculate unread count (messages sent by partner after user's lastReadAt)
         const lastRead = userParticipant?.lastReadAt || new Date(0);
-        const unread = c.messages.filter(
+        const unread = activeMessages.filter(
           (m: any) => m.senderId !== userId && new Date(m.createdAt) > new Date(lastRead)
         ).length;
 
@@ -39,7 +40,7 @@ export class ChatService {
           partnerId: partner?.id || '',
           name: prof?.name || 'Velvet Hearts Member',
           photo: prof?.photos?.[0]?.secureUrl || '',
-          lastMessage: lastMsg ? (lastMsg.isDeleted ? 'Message deleted' : lastMsg.text) : '',
+          lastMessage: lastMsg ? lastMsg.text : '',
           lastMessageTime: lastMsg ? lastMsg.createdAt : c.updatedAt,
           unreadCount: unread,
         };
@@ -67,15 +68,17 @@ export class ChatService {
     // Update last read receipt for user
     await this.chatRepository.updateLastRead(conversationId, userId);
 
-    return messages.map((m) => ({
-      id: m.id,
-      senderId: m.senderId,
-      text: m.isDeleted ? 'This message was deleted' : m.text,
-      isDeleted: m.isDeleted,
-      attachments: m.attachments,
-      createdAt: m.createdAt,
-      updatedAt: m.updatedAt,
-    }));
+    return messages
+      .filter((m) => !m.isDeleted)
+      .map((m) => ({
+        id: m.id,
+        senderId: m.senderId,
+        text: m.text,
+        isDeleted: m.isDeleted,
+        attachments: m.attachments,
+        createdAt: m.createdAt,
+        updatedAt: m.updatedAt,
+      }));
   }
 
   async sendMessage(conversationId: string, senderId: string, text?: string, attachments?: any[]) {
@@ -108,6 +111,20 @@ export class ChatService {
       try {
         if (io) {
           io.to(partner.userId).emit('notification', { notification: notif });
+          const socketMessagePayload = {
+            conversationId,
+            message: {
+              id: message.id,
+              senderId: message.senderId,
+              text: message.text,
+              isDeleted: message.isDeleted,
+              attachments: message.attachments,
+              createdAt: message.createdAt,
+              updatedAt: message.updatedAt,
+            }
+          };
+          io.to(partner.userId).emit('new_message', socketMessagePayload);
+          io.to(senderId).emit('new_message', socketMessagePayload);
         }
       } catch (e) {
         // Logging skipped here to avoid pulling logger dependency into this service

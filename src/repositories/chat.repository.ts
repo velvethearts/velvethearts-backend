@@ -175,12 +175,11 @@ export class ChatRepository {
     });
   }
 
-  async softDeleteUserMessagesInConversation(conversationId: string, senderId: string): Promise<{ count: number }> {
+  async softDeleteUserMessagesInConversation(conversationId: string, _senderId?: string): Promise<{ count: number }> {
     return prisma.$transaction(async (tx) => {
       const result = await tx.message.updateMany({
         where: {
           conversationId,
-          senderId,
           isDeleted: false,
         },
         data: {
