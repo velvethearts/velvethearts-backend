@@ -1,6 +1,7 @@
 import { ChatRepository } from '../repositories/chat.repository';
 import { NotificationRepository } from '../repositories/notification.repository';
 import { NotificationType } from '@prisma/client';
+import { io } from '../socket';
 
 export class ChatService {
   private chatRepository = new ChatRepository();
@@ -72,13 +73,22 @@ export class ChatService {
     // Get the other participant
     const partner = conversation.participants.find((p) => p.userId !== senderId);
     if (partner) {
-      await this.notificationRepository.create(
+      // Create persisted notification and then emit it so client sees it in real-time
+      const notif = await this.notificationRepository.create(
         partner.userId,
         NotificationType.MESSAGE,
         'New message',
         text || 'Sent an attachment',
         conversationId
       );
+
+      try {
+        if (io) {
+          io.to(partner.userId).emit('notification', { notification: notif });
+        }
+      } catch (e) {
+        // Logging skipped here to avoid pulling logger dependency into this service
+      }
     }
 
     return message;

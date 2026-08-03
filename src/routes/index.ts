@@ -54,6 +54,9 @@ router.delete('/profile', requireAuth, profileCtrl.deleteAccount);
 // DISCOVER & SEARCH ROUTES
 // ==========================================
 router.get('/discover', requireAuth,  searchDiscoverRateLimiter, discoverCtrl.getRecommendations);
+
+// Internal cron endpoint for discover nudges (protected by x-cron-secret header)
+router.post('/internal/cron/discover-nudge', discoverCtrl.runDiscoverNudge);
 router.get('/search', requireAuth,  searchDiscoverRateLimiter, searchCtrl.search);
 
 // ==========================================

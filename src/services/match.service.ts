@@ -148,14 +148,14 @@ export class MatchService {
               type: NotificationType.MATCH,
               title: 'New Connection!',
               content: 'You have a new match on Velvet Hearts!',
-              relatedId: match.id
+              relatedId: conversation.id
             },
             {
               userId: receiverId,
               type: NotificationType.MATCH,
               title: 'New Connection!',
               content: 'You have a new match on Velvet Hearts!',
-              relatedId: match.id
+              relatedId: conversation.id
             }
           ]
         });

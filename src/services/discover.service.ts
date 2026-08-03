@@ -31,6 +31,9 @@ export function calculateProfileCompletion(profile: any): number {
   return score;
 }
 
+import { NotificationType } from '@prisma/client';
+import { io } from '../socket';
+
 export class DiscoverService {
   private blockRepository = new BlockRepository();
   private likeRepository = new LikeRepository();
@@ -241,5 +244,77 @@ export class DiscoverService {
         pages,
       },
     };
+  }
+
+  /**
+   * Send discover nudge notifications to users who have not viewed Discover
+   * in the configured inactive period and haven't been nudged recently.
+   * This is intended to be called by an external cron (Render cron) hitting
+   * an internal endpoint. No external scheduler dependency required.
+   */
+  async sendDiscoverNudges(inactiveHours = 12, rateLimitHours = 24) {
+    const now = new Date();
+    const viewedThreshold = new Date(Date.now() - inactiveHours * 60 * 60 * 1000);
+    const nudgedThreshold = new Date(Date.now() - rateLimitHours * 60 * 60 * 1000);
+
+    // Find users who are ACTIVE + APPROVED and whose settings indicate they
+    // haven't viewed discover recently and haven't been nudged recently.
+    const candidates = await prisma.user.findMany({
+      where: {
+        status: UserStatus.ACTIVE,
+        approvalStatus: ApprovalStatus.APPROVED,
+      },
+      include: {
+        settings: true,
+      },
+    });
+
+    const eligibleCandidates = candidates.filter((u) => {
+      const settings = u.settings;
+      if (!settings) return false;
+
+      const lastViewedAt = settings.lastDiscoverViewedAt;
+      const lastNudgedAt = settings.lastDiscoverNudgedAt;
+
+      return (!lastViewedAt || lastViewedAt < viewedThreshold) &&
+        (!lastNudgedAt || lastNudgedAt < nudgedThreshold);
+    });
+
+    const created: any[] = [];
+
+    for (const u of eligibleCandidates) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          const notif = await tx.notification.create({
+            data: {
+              userId: u.id,
+              type: NotificationType.SYSTEM,
+              title: 'New people near you',
+              content: 'New people have joined near you — take a look.',
+              relatedId: null,
+            },
+          });
+
+          await tx.userSettings.update({
+            where: { userId: u.id },
+            data: { lastDiscoverNudgedAt: now },
+          });
+
+          created.push(notif);
+        });
+
+        // Emit real-time notification
+        try {
+          if (io) io.to(u.id).emit('notification', { notification: created[created.length - 1] });
+        } catch (e) {
+          // ignore socket failures
+        }
+      } catch (err) {
+        // Per-user failures shouldn't block others
+        continue;
+      }
+    }
+
+    return { count: created.length };
   }
 }

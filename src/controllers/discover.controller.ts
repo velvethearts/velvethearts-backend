@@ -57,4 +57,25 @@ export class DiscoverController {
       return res.status(500).json({ success: false, message: error.message || 'Retrieving discover feed failed' });
     }
   };
+
+  // Endpoint for Render cron to trigger discover nudges. Expects header 'x-cron-secret' to match env var CRON_SECRET.
+  runDiscoverNudge = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const secret = req.headers['x-cron-secret'] as string | undefined;
+      if (!process.env.CRON_SECRET || process.env.CRON_SECRET !== secret) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
+
+      const inactiveHours = Number(process.env.DISCOVER_NUDGE_INACTIVE_HOURS || 12);
+      const rateLimitHours = Number(process.env.DISCOVER_NUDGE_RATE_LIMIT_HOURS || 24);
+
+      const result = await this.discoverService.sendDiscoverNudges(inactiveHours, rateLimitHours);
+
+      return res.status(200).json({ success: true, message: 'Discover nudges processed', data: result });
+    } catch (error: any) {
+      logger.error('runDiscoverNudge controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Failed to run discover nudges' });
+    }
+  };
 }
+
