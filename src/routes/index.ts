@@ -72,6 +72,9 @@ router.get('/match/received-invites', requireAuth, matchCtrl.getReceivedInvites)
 // SAFETY ROUTES (BLOCK & REPORT)
 // ==========================================
 router.post('/block', requireAuth, safetyCtrl.block);
+router.delete('/block/:blockedUserId', requireAuth, safetyCtrl.unblock);
+router.post('/unblock', requireAuth, safetyCtrl.unblock);
+router.get('/safety/blocked', requireAuth, safetyCtrl.getBlockedUsers);
 router.post('/safety/reports', requireAuth, reportRateLimiter, safetyCtrl.report);
 
 // ==========================================

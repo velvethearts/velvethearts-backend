@@ -61,4 +61,45 @@ export class SafetyController {
       return res.status(500).json({ success: false, message: error.message || 'Submitting report failed' });
     }
   };
+
+  unblock = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const blockedUserId = req.params.blockedUserId || req.body?.blockedUserId;
+      if (!blockedUserId) {
+        return res.status(400).json({ success: false, message: 'Blocked user ID is required' });
+      }
+
+      await this.safetyService.unblockUser(req.user.userId, blockedUserId);
+
+      return res.status(200).json({
+        success: true,
+        message: 'User unblocked successfully',
+      });
+    } catch (error: any) {
+      logger.error('Unblock controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Unblocking user failed' });
+    }
+  };
+
+  getBlockedUsers = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const blockedUsers = await this.safetyService.getBlockedUsers(req.user.userId);
+
+      return res.status(200).json({
+        success: true,
+        data: blockedUsers,
+      });
+    } catch (error: any) {
+      logger.error('Get blocked users controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Fetching blocked users failed' });
+    }
+  };
 }

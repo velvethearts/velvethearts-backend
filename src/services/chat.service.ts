@@ -1,40 +1,48 @@
 import { ChatRepository } from '../repositories/chat.repository';
 import { NotificationRepository } from '../repositories/notification.repository';
+import { BlockRepository } from '../repositories/block.repository';
 import { NotificationType } from '@prisma/client';
 import { io } from '../socket';
 
 export class ChatService {
   private chatRepository = new ChatRepository();
   private notificationRepository = new NotificationRepository();
+  private blockRepository = new BlockRepository();
 
   async getConversations(userId: string) {
     const list = await this.chatRepository.findUserConversations(userId);
+    const blockedUserIds = new Set(await this.blockRepository.findBlockedUserIds(userId));
 
-    return list.map((c) => {
-      const partnerParticipant = c.participants.find((p: any) => p.userId !== userId);
-      const userParticipant = c.participants.find((p: any) => p.userId === userId);
-      
-      const partner = partnerParticipant?.user;
-      const prof = partner?.profile;
+    return list
+      .filter((c) => {
+        const partnerParticipant = c.participants.find((p: any) => p.userId !== userId);
+        return partnerParticipant && !blockedUserIds.has(partnerParticipant.userId);
+      })
+      .map((c) => {
+        const partnerParticipant = c.participants.find((p: any) => p.userId !== userId);
+        const userParticipant = c.participants.find((p: any) => p.userId === userId);
+        
+        const partner = partnerParticipant?.user;
+        const prof = partner?.profile;
 
-      const lastMsg = c.messages[0] || null;
-      
-      // Calculate unread count (messages sent by partner after user's lastReadAt)
-      const lastRead = userParticipant?.lastReadAt || new Date(0);
-      const unread = c.messages.filter(
-        (m: any) => m.senderId !== userId && new Date(m.createdAt) > new Date(lastRead)
-      ).length;
+        const lastMsg = c.messages[0] || null;
+        
+        // Calculate unread count (messages sent by partner after user's lastReadAt)
+        const lastRead = userParticipant?.lastReadAt || new Date(0);
+        const unread = c.messages.filter(
+          (m: any) => m.senderId !== userId && new Date(m.createdAt) > new Date(lastRead)
+        ).length;
 
-      return {
-        id: c.id,
-        partnerId: partner?.id || '',
-        name: prof?.name || 'Velvet Hearts Member',
-        photo: prof?.photos?.[0]?.secureUrl || '',
-        lastMessage: lastMsg ? (lastMsg.isDeleted ? 'Message deleted' : lastMsg.text) : '',
-        lastMessageTime: lastMsg ? lastMsg.createdAt : c.updatedAt,
-        unreadCount: unread,
-      };
-    });
+        return {
+          id: c.id,
+          partnerId: partner?.id || '',
+          name: prof?.name || 'Velvet Hearts Member',
+          photo: prof?.photos?.[0]?.secureUrl || '',
+          lastMessage: lastMsg ? (lastMsg.isDeleted ? 'Message deleted' : lastMsg.text) : '',
+          lastMessageTime: lastMsg ? lastMsg.createdAt : c.updatedAt,
+          unreadCount: unread,
+        };
+      });
   }
 
   async getMessages(conversationId: string, userId: string, limit = 50, page = 1) {
@@ -43,6 +51,14 @@ export class ChatService {
 
     const isMember = conversation.participants.some((p) => p.userId === userId);
     if (!isMember) throw new Error('Unauthorized chat query');
+
+    const partner = conversation.participants.find((p) => p.userId !== userId);
+    if (partner) {
+      const blockedUserIds = new Set(await this.blockRepository.findBlockedUserIds(userId));
+      if (blockedUserIds.has(partner.userId)) {
+        throw new Error('Cannot access chat with a blocked user');
+      }
+    }
 
     // Fetch messages
     const messages = await this.chatRepository.findMessagesByConversation(conversationId, limit, page);
@@ -67,6 +83,14 @@ export class ChatService {
 
     const isMember = conversation.participants.some((p) => p.userId === senderId);
     if (!isMember) throw new Error('Unauthorized send message action');
+
+    const partner = conversation.participants.find((p) => p.userId !== senderId);
+    if (partner) {
+      const blockedUserIds = new Set(await this.blockRepository.findBlockedUserIds(senderId));
+      if (blockedUserIds.has(partner.userId)) {
+        throw new Error('Cannot send messages to a blocked user');
+      }
+    }
 
     const message = await this.chatRepository.createMessage(conversationId, senderId, text, attachments);
 

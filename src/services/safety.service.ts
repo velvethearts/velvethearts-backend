@@ -81,4 +81,40 @@ export class SafetyService {
 
     return { success: true };
   }
+
+  async unblockUser(blockerId: string, blockedId: string) {
+    if (blockerId === blockedId) {
+      throw new Error('Invalid unblock parameters');
+    }
+
+    const deleted = await this.blockRepository.delete(blockerId, blockedId);
+
+    // Log unblock action
+    await this.logRepository.create({
+      userId: blockerId,
+      action: 'UNBLOCK_USER',
+      details: JSON.stringify({ blockedId }),
+    });
+
+    return { success: true, deleted: !!deleted };
+  }
+
+  async getBlockedUsers(userId: string) {
+    const blocks = await this.blockRepository.findBlocksByBlocker(userId);
+
+    return blocks.map((b) => {
+      const prof = b.blocked?.profile;
+      const primaryPhoto = prof?.photos?.find((p) => p.isPrimary)?.secureUrl || prof?.photos?.[0]?.secureUrl || null;
+
+      return {
+        id: b.id,
+        blockedUserId: b.blockedId,
+        name: prof?.name || 'Blocked User',
+        avatar: primaryPhoto,
+        city: prof?.city || null,
+        reason: b.reason || null,
+        blockedAt: b.createdAt,
+      };
+    });
+  }
 }

@@ -54,4 +54,24 @@ export class BlockRepository {
     blockedMe.forEach((b) => ids.add(b.blockerId));
     return Array.from(ids);
   }
+
+  async findBlocksByBlocker(blockerId: string) {
+    return prisma.block.findMany({
+      where: { blockerId },
+      include: {
+        blocked: {
+          include: {
+            profile: {
+              include: {
+                photos: {
+                  orderBy: { photoOrder: 'asc' },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }
