@@ -89,6 +89,41 @@ export class SafetyService {
 
     const deleted = await this.blockRepository.delete(blockerId, blockedId);
 
+    // If there was a match auto-unmatched by this blocker during block, restore it
+    const [u1, u2] = [blockerId, blockedId].sort();
+    const match = await prisma.match.findUnique({
+      where: {
+        user1Id_user2Id: {
+          user1Id: u1,
+          user2Id: u2,
+        },
+      },
+    });
+
+    if (match && match.unmatched && match.unmatchedBy === blockerId) {
+      await prisma.match.update({
+        where: { id: match.id },
+        data: {
+          unmatched: false,
+          unmatchedAt: null,
+          unmatchedBy: null,
+        },
+      });
+
+      // Restore mutual likes so connection status is active
+      await prisma.like.upsert({
+        where: { senderId_receiverId: { senderId: blockerId, receiverId: blockedId } },
+        create: { senderId: blockerId, receiverId: blockedId },
+        update: {},
+      });
+
+      await prisma.like.upsert({
+        where: { senderId_receiverId: { senderId: blockedId, receiverId: blockerId } },
+        create: { senderId: blockedId, receiverId: blockedId },
+        update: {},
+      });
+    }
+
     // Log unblock action
     await this.logRepository.create({
       userId: blockerId,
