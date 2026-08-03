@@ -94,8 +94,6 @@ export class ChatService {
 
     const message = await this.chatRepository.createMessage(conversationId, senderId, text, attachments);
 
-    // Get the other participant
-    const partner = conversation.participants.find((p) => p.userId !== senderId);
     if (partner) {
       // Create persisted notification and then emit it so client sees it in real-time
       const notif = await this.notificationRepository.create(
