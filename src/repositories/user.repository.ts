@@ -8,9 +8,10 @@ export class UserRepository {
     });
   }
 
-  async findByFirebaseUid(firebaseUid: string): Promise<User | null> {
+  async findByFirebaseUid(firebaseUid: string): Promise<any | null> {
     return prisma.user.findUnique({
       where: { firebaseUid },
+      include: { profile: true },
     });
   }
 
