@@ -89,4 +89,30 @@ export class ProfileController {
       return res.status(500).json({ success: false, message: error.message || 'Deleting account failed' });
     }
   };
+
+  getSettings = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+      const settings = await this.profileService.getSettings(req.user.userId);
+      return res.status(200).json({ success: true, data: settings });
+    } catch (error: any) {
+      logger.error('getSettings controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Retrieving settings failed' });
+    }
+  };
+
+  updateSettings = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+      const settings = await this.profileService.updateSettings(req.user.userId, req.body);
+      return res.status(200).json({ success: true, message: 'Settings updated successfully', data: settings });
+    } catch (error: any) {
+      logger.error('updateSettings controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Updating settings failed' });
+    }
+  };
 }

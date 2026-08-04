@@ -47,6 +47,8 @@ router.post('/auth/login', authRateLimiter, authCtrl.login);
 // ==========================================
 // Pending users are allowed to retrieve their profile to check approvalStatus
 router.get('/profile/me', requireAuth, profileCtrl.getMe);
+router.get('/profile/settings', requireAuth, profileCtrl.getSettings);
+router.put('/profile/settings', requireAuth, profileCtrl.updateSettings);
 router.post('/profile', requireAuth, profileCtrl.saveProfile);
 router.delete('/profile', requireAuth, profileCtrl.deleteAccount);
 

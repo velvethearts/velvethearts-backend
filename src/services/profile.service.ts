@@ -169,4 +169,52 @@ export class ProfileService {
 
     return { success: true };
   }
+
+  async getSettings(userId: string) {
+    let settings = await prisma.userSettings.findUnique({ where: { userId } });
+    if (!settings) {
+      settings = await prisma.userSettings.create({
+        data: {
+          userId,
+          matchNotifs: true,
+          chatNotifs: true,
+          interestNotifs: true,
+          emailNotifs: false,
+          theme: 'system',
+          reduceMotion: false,
+          highContrast: false,
+          textSize: 'medium',
+        },
+      });
+    }
+    return settings;
+  }
+
+  async updateSettings(userId: string, data: any) {
+    const settings = await prisma.userSettings.upsert({
+      where: { userId },
+      update: {
+        ...(typeof data.matchNotifs === 'boolean' && { matchNotifs: data.matchNotifs }),
+        ...(typeof data.chatNotifs === 'boolean' && { chatNotifs: data.chatNotifs }),
+        ...(typeof data.interestNotifs === 'boolean' && { interestNotifs: data.interestNotifs }),
+        ...(typeof data.emailNotifs === 'boolean' && { emailNotifs: data.emailNotifs }),
+        ...(typeof data.theme === 'string' && { theme: data.theme }),
+        ...(typeof data.reduceMotion === 'boolean' && { reduceMotion: data.reduceMotion }),
+        ...(typeof data.highContrast === 'boolean' && { highContrast: data.highContrast }),
+        ...(typeof data.textSize === 'string' && { textSize: data.textSize }),
+      },
+      create: {
+        userId,
+        matchNotifs: data.matchNotifs ?? true,
+        chatNotifs: data.chatNotifs ?? true,
+        interestNotifs: data.interestNotifs ?? true,
+        emailNotifs: data.emailNotifs ?? false,
+        theme: data.theme || 'system',
+        reduceMotion: data.reduceMotion ?? false,
+        highContrast: data.highContrast ?? false,
+        textSize: data.textSize || 'medium',
+      },
+    });
+    return settings;
+  }
 }
