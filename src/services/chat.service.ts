@@ -47,7 +47,7 @@ export class ChatService {
   }
 
   async getMessages(conversationId: string, userId: string, limit = 50, page = 1) {
-    const conversation = await this.chatRepository.findConversationById(conversationId);
+    const conversation = await this.chatRepository.findConversationByTarget(userId, conversationId);
     if (!conversation) throw new Error('Conversation not found');
 
     const isMember = conversation.participants.some((p) => p.userId === userId);
@@ -61,11 +61,11 @@ export class ChatService {
       }
     }
 
-    // Fetch messages
-    const messages = await this.chatRepository.findMessagesByConversation(conversationId, limit, page);
+    // Fetch messages using canonical conversation.id
+    const messages = await this.chatRepository.findMessagesByConversation(conversation.id, limit, page);
 
     // Update last read receipt for user
-    await this.chatRepository.updateLastRead(conversationId, userId);
+    await this.chatRepository.updateLastRead(conversation.id, userId);
 
     const partnerLastReadAt = partner?.lastReadAt ? new Date(partner.lastReadAt) : null;
     const seenAt = new Date().toISOString();
@@ -73,11 +73,11 @@ export class ChatService {
     // Emit real-time read receipt to partner if online
     if (io && partner) {
       const seenPayload = {
-        conversationId,
+        conversationId: conversation.id,
         readerId: userId,
         seenAt,
       };
-      io.to(conversationId).emit('messages_seen', seenPayload);
+      io.to(conversation.id).emit('messages_seen', seenPayload);
       io.to(partner.userId).emit('messages_seen', seenPayload);
     }
 
@@ -98,9 +98,11 @@ export class ChatService {
       });
   }
 
-  async sendMessage(conversationId: string, senderId: string, text?: string, attachments?: any[]) {
-    const conversation = await this.chatRepository.findConversationById(conversationId);
+  async sendMessage(targetConversationId: string, senderId: string, text?: string, attachments?: any[]) {
+    const conversation = await this.chatRepository.findConversationByTarget(senderId, targetConversationId);
     if (!conversation) throw new Error('Conversation not found');
+
+    const conversationId = conversation.id;
 
     const isMember = conversation.participants.some((p) => p.userId === senderId);
     if (!isMember) throw new Error('Unauthorized send message action');

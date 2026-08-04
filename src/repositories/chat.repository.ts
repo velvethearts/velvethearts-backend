@@ -36,6 +36,50 @@ export class ChatRepository {
     });
   }
 
+  async findConversationByTarget(userId: string, targetId: string): Promise<(Conversation & { participants: ConversationParticipant[] }) | null> {
+    // 1. Try finding by conversation ID
+    let conv = await prisma.conversation.findUnique({
+      where: { id: targetId },
+      include: { participants: true },
+    });
+    if (conv) return conv;
+
+    // 2. Try finding by matchId
+    conv = await prisma.conversation.findUnique({
+      where: { matchId: targetId },
+      include: { participants: true },
+    });
+    if (conv) return conv;
+
+    // 3. Try finding by partner userId in participants
+    conv = await prisma.conversation.findFirst({
+      where: {
+        AND: [
+          { participants: { some: { userId } } },
+          { participants: { some: { userId: targetId } } },
+        ],
+      },
+      include: { participants: true },
+    });
+    if (conv) return conv;
+
+    // 4. Fallback: check if active match exists between userId and targetId
+    const [u1, u2] = [userId, targetId].sort();
+    const match = await prisma.match.findFirst({
+      where: {
+        user1Id: u1,
+        user2Id: u2,
+        unmatched: false,
+      },
+    });
+
+    if (match) {
+      return this.findOrCreateConversation(match.id, [userId, targetId]);
+    }
+
+    return null;
+  }
+
   async findUserConversations(userId: string): Promise<any[]> {
     return prisma.conversation.findMany({
       where: {
