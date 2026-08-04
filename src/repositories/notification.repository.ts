@@ -39,4 +39,54 @@ export class NotificationRepository {
       data: { isRead: true },
     });
   }
+
+  async markByRelatedId(relatedId: string, userId: string): Promise<any> {
+    return prisma.notification.updateMany({
+      where: {
+        userId,
+        relatedId,
+        isRead: false,
+      },
+      data: { isRead: true },
+    });
+  }
+
+  async upsertUnreadMessageNotification(
+    userId: string,
+    title: string,
+    content: string,
+    conversationId: string
+  ): Promise<{ notification: Notification; isNew: boolean }> {
+    const existing = await prisma.notification.findFirst({
+      where: {
+        userId,
+        type: NotificationType.MESSAGE,
+        relatedId: conversationId,
+        isRead: false,
+      },
+    });
+
+    if (existing) {
+      const updated = await prisma.notification.update({
+        where: { id: existing.id },
+        data: {
+          content,
+          createdAt: new Date(),
+        },
+      });
+      return { notification: updated, isNew: false };
+    }
+
+    const created = await prisma.notification.create({
+      data: {
+        userId,
+        type: NotificationType.MESSAGE,
+        title,
+        content,
+        relatedId: conversationId,
+      },
+    });
+
+    return { notification: created, isNew: true };
+  }
 }

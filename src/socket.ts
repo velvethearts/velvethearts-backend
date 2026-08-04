@@ -100,6 +100,19 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }
     });
 
+    // Handle mark seen
+    socket.on('mark_seen', async (conversationId: string) => {
+      if (conversationId && userId) {
+        try {
+          const { ChatService } = await import('./services/chat.service');
+          const chatService = new ChatService();
+          await chatService.markSeen(conversationId, userId);
+        } catch (e: any) {
+          logger.error('Socket mark_seen error:', e?.message || e);
+        }
+      }
+    });
+
     socket.on('disconnect', () => {
       const count = userSocketCounts.get(userId) || 1;
       if (count <= 1) {

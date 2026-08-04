@@ -1,7 +1,6 @@
 import { ChatRepository } from '../repositories/chat.repository';
 import { NotificationRepository } from '../repositories/notification.repository';
 import { BlockRepository } from '../repositories/block.repository';
-import { NotificationType } from '@prisma/client';
 import { io } from '../socket';
 import { prisma } from '../config/database';
 
@@ -68,17 +67,35 @@ export class ChatService {
     // Update last read receipt for user
     await this.chatRepository.updateLastRead(conversationId, userId);
 
+    const partnerLastReadAt = partner?.lastReadAt ? new Date(partner.lastReadAt) : null;
+    const seenAt = new Date().toISOString();
+
+    // Emit real-time read receipt to partner if online
+    if (io && partner) {
+      const seenPayload = {
+        conversationId,
+        readerId: userId,
+        seenAt,
+      };
+      io.to(conversationId).emit('messages_seen', seenPayload);
+      io.to(partner.userId).emit('messages_seen', seenPayload);
+    }
+
     return messages
       .filter((m) => !m.isDeleted)
-      .map((m) => ({
-        id: m.id,
-        senderId: m.senderId,
-        text: m.text,
-        isDeleted: m.isDeleted,
-        attachments: m.attachments,
-        createdAt: m.createdAt,
-        updatedAt: m.updatedAt,
-      }));
+      .map((m) => {
+        const isSeen = m.senderId === userId && partnerLastReadAt ? partnerLastReadAt >= new Date(m.createdAt) : false;
+        return {
+          id: m.id,
+          senderId: m.senderId,
+          text: m.text,
+          isDeleted: m.isDeleted,
+          attachments: m.attachments,
+          seen: isSeen,
+          createdAt: m.createdAt,
+          updatedAt: m.updatedAt,
+        };
+      });
   }
 
   async sendMessage(conversationId: string, senderId: string, text?: string, attachments?: any[]) {
@@ -99,18 +116,8 @@ export class ChatService {
     const message = await this.chatRepository.createMessage(conversationId, senderId, text, attachments);
 
     if (partner) {
-      // Create persisted notification and then emit it so client sees it in real-time
-      const notif = await this.notificationRepository.create(
-        partner.userId,
-        NotificationType.MESSAGE,
-        'New message',
-        text || 'Sent an attachment',
-        conversationId
-      );
-
       try {
         if (io) {
-          io.to(partner.userId).emit('notification', { notification: notif });
           const socketMessagePayload = {
             conversationId,
             message: {
@@ -214,7 +221,22 @@ export class ChatService {
     if (!isMember) throw new Error('Unauthorized conversation action');
 
     await this.chatRepository.updateLastRead(conversationId, userId);
-    return { success: true };
+    await this.notificationRepository.markByRelatedId(conversationId, userId);
+
+    const partner = conversation.participants.find((p) => p.userId !== userId);
+    const seenAt = new Date().toISOString();
+
+    if (io && partner) {
+      const seenPayload = {
+        conversationId,
+        readerId: userId,
+        seenAt,
+      };
+      io.to(conversationId).emit('messages_seen', seenPayload);
+      io.to(partner.userId).emit('messages_seen', seenPayload);
+    }
+
+    return { success: true, seenAt };
   }
 
   async markDelivered(conversationId: string, userId: string) {
