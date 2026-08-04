@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { io } from '../socket';
 
 const sendMessageSchema = z.object({
-  text: z.string().min(1, 'Message text cannot be empty').optional(),
+  text: z.string().optional(),
   attachments: z
     .array(
       z.object({
@@ -18,7 +18,7 @@ const sendMessageSchema = z.object({
       })
     )
     .optional(),
-}).refine(data => data.text || (data.attachments && data.attachments.length > 0), {
+}).refine(data => Boolean(data.text && data.text.trim().length > 0) || Boolean(data.attachments && data.attachments.length > 0), {
   message: 'Message must contain either text or attachments',
 });
 

@@ -128,7 +128,7 @@ export class ChatRepository {
         data: {
           conversationId,
           senderId,
-          text,
+          text: text && text.trim() ? text.trim() : null,
           attachments: attachments
             ? {
                 create: attachments.map((att) => ({
