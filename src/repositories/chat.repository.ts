@@ -109,6 +109,9 @@ export class ChatRepository {
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 25,
+          include: {
+            attachments: true,
+          },
         },
       },
       orderBy: {

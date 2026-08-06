@@ -28,6 +28,16 @@ export class ChatService {
         const activeMessages = c.messages.filter((m: any) => !m.isDeleted);
         const lastMsg = activeMessages[0] || null;
         
+        let lastMsgText = '';
+        if (lastMsg) {
+          if (lastMsg.text) {
+            lastMsgText = lastMsg.text;
+          } else if (Array.isArray(lastMsg.attachments) && lastMsg.attachments.length > 0) {
+            const firstAtt = lastMsg.attachments[0];
+            lastMsgText = firstAtt.fileType === 'AUDIO' ? '🎤 Voice note' : 'Sent an attachment';
+          }
+        }
+        
         // Calculate unread count (messages sent by partner after user's lastReadAt)
         const lastRead = userParticipant?.lastReadAt || new Date(0);
         const unread = activeMessages.filter(
@@ -39,7 +49,7 @@ export class ChatService {
           partnerId: partner?.id || '',
           name: prof?.name || 'Velvet Hearts Member',
           photo: prof?.photos?.[0]?.secureUrl || '',
-          lastMessage: lastMsg ? lastMsg.text : '',
+          lastMessage: lastMsgText,
           lastMessageTime: lastMsg ? lastMsg.createdAt : c.updatedAt,
           unreadCount: unread,
         };

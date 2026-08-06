@@ -13,7 +13,7 @@ export class UploadController {
         return res.status(400).json({ success: false, message: 'No file uploaded' });
       }
 
-      const result = await this.uploadService.uploadImage(file.buffer);
+      const result = await this.uploadService.uploadImage(file.buffer, 'velvet_hearts', file.mimetype);
 
       return res.status(200).json({
         success: true,

@@ -9,15 +9,18 @@ cloudinary.config({
 });
 
 export class UploadService {
-  async uploadImage(fileBuffer: Buffer, folder = 'velvet_hearts'): Promise<{ secureUrl: string; publicId: string; width: number; height: number }> {
+  async uploadImage(fileBuffer: Buffer, folder = 'velvet_hearts', mimeType?: string): Promise<{ secureUrl: string; publicId: string; width: number; height: number }> {
     // Check for default development Cloudinary keys
     if (env.CLOUDINARY_API_KEY === '123456789012345' || !env.CLOUDINARY_API_KEY) {
       logger.warn('Mock Cloudinary upload active (using fallback assets for development).');
+      const isAudio = mimeType?.startsWith('audio/') || mimeType?.includes('webm') || mimeType?.includes('mp3') || mimeType?.includes('ogg') || mimeType?.includes('wav') || mimeType?.includes('m4a');
       return {
-        secureUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500',
+        secureUrl: isAudio 
+          ? 'https://actions.google.com/sounds/v1/ambiences/rain_heavy.ogg'
+          : 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500',
         publicId: `mock_asset_${Date.now()}`,
-        width: 500,
-        height: 500,
+        width: isAudio ? 0 : 500,
+        height: isAudio ? 0 : 500,
       };
     }
 

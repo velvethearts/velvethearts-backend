@@ -1,5 +1,6 @@
 import { ActivityLogRepository } from '../repositories/activity-log.repository';
 import { UserRepository } from '../repositories/user.repository';
+import { EmailService } from './email.service';
 import { prisma } from '../config/database';
 import { firebaseAuth } from '../config/firebase';
 import { ApprovalStatus, Role, User, UserStatus } from '@prisma/client';
@@ -15,6 +16,8 @@ interface FirebaseUserInfo {
 export class AuthService {
   private userRepository = new UserRepository();
   private logRepository = new ActivityLogRepository();
+  private emailService = new EmailService();
+
 
   private async verifyFirebaseIdToken(firebaseIdToken: string): Promise<FirebaseUserInfo> {
     const decoded = await firebaseAuth().verifyIdToken(firebaseIdToken);
@@ -137,6 +140,12 @@ export class AuthService {
       userAgent: options.userAgent,
     });
 
+    if (user.email) {
+      this.emailService.sendWelcomeEmail(user.email, firebaseUser.name).catch((err) => {
+        console.error('[AuthService] Error invoking sendWelcomeEmail:', err);
+      });
+    }
+
     return user;
   }
-}
+}
