@@ -170,6 +170,7 @@ model Message {
   conversationId String
   senderId       String
   text           String?
+  isEdited       Boolean           @default(false)
   isDeleted      Boolean           @default(false)
   deletedAt      DateTime?
   createdAt      DateTime          @default(now())

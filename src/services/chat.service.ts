@@ -89,6 +89,7 @@ export class ChatService {
           id: m.id,
           senderId: m.senderId,
           text: m.text,
+          isEdited: Boolean(m.isEdited),
           isDeleted: m.isDeleted,
           attachments: m.attachments,
           seen: isSeen,
@@ -126,6 +127,7 @@ export class ChatService {
               id: message.id,
               senderId: message.senderId,
               text: message.text,
+              isEdited: Boolean(message.isEdited),
               isDeleted: message.isDeleted,
               attachments: message.attachments,
               createdAt: message.createdAt,
@@ -155,6 +157,11 @@ export class ChatService {
 
     if (message.isDeleted) {
       throw new Error('Cannot edit a deleted message');
+    }
+
+    const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+    if (Date.now() - new Date(message.createdAt).getTime() > FIFTEEN_MINUTES_MS) {
+      throw new Error('Messages can only be edited within 15 minutes of sending');
     }
 
     return this.chatRepository.editMessage(messageId, text);

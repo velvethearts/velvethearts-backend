@@ -67,10 +67,6 @@ export class MatchService {
         // Create Match (sort IDs to prevent duplicates)
         const [u1, u2] = [senderId, receiverId].sort();
 
-        // (user1Id, user2Id) is a unique constraint, and unmatching only
-        // flips `unmatched: true` rather than deleting the row — so if
-        // these two users matched before, an old row already exists here.
-        // Revive it instead of trying to insert a duplicate.
         let match = await tx.match.findUnique({
           where: {
             user1Id_user2Id: {
@@ -107,6 +103,11 @@ export class MatchService {
                   ]
                 }
               }
+            });
+          } else {
+            // Delete all old chat messages so the re-matched pair starts a fresh clean chat
+            await tx.message.deleteMany({
+              where: { conversationId: conversation.id },
             });
           }
         } else {
@@ -159,6 +160,7 @@ export class MatchService {
             }
           ]
         });
+
         // Notify both users instantly
         io.to(senderId).emit("matchCreated", {
           conversationId: conversation.id,
@@ -172,7 +174,7 @@ export class MatchService {
           match: true,
           conversationId: conversation.id,
         };
-              }
+      }
 
       // If not mutual, push general Like notification
       await tx.notification.create({
@@ -195,23 +197,23 @@ export class MatchService {
       details: JSON.stringify({ receiverId }),
     });
 
-      if (result.match) {
-    // Log Match Creation
-    await this.logRepository.create({
-      userId: senderId,
-      action: 'MATCH_CREATE',
-      details: JSON.stringify({ user2Id: receiverId }),
-    });
+    if (result.match) {
+      // Log Match Creation
+      await this.logRepository.create({
+        userId: senderId,
+        action: 'MATCH_CREATE',
+        details: JSON.stringify({ user2Id: receiverId }),
+      });
 
-    // Notify both users in real time
-    io.to(senderId).emit('matchCreated', {
-      conversationId: result.conversationId,
-    });
+      // Notify both users in real time
+      io.to(senderId).emit('matchCreated', {
+        conversationId: result.conversationId,
+      });
 
-    io.to(receiverId).emit('matchCreated', {
-      conversationId: result.conversationId,
-    });
-  }
+      io.to(receiverId).emit('matchCreated', {
+        conversationId: result.conversationId,
+      });
+    }
 
     return result;
   }
@@ -254,6 +256,16 @@ export class MatchService {
 
     await this.matchRepository.unmatch(matchId, userId);
 
+    // Delete all messages in the conversation so re-matching starts a fresh chat
+    const conversation = await prisma.conversation.findUnique({
+      where: { matchId },
+    });
+    if (conversation) {
+      await prisma.message.deleteMany({
+        where: { conversationId: conversation.id },
+      });
+    }
+
     await this.logRepository.create({
       userId,
       action: 'UNMATCH_USER',
@@ -289,10 +301,21 @@ export class MatchService {
         name: prof?.name || 'Velvet Hearts Member',
         age,
         city: prof?.city || '',
-        photo: prof?.photos?.[0]?.secureUrl || '',
+        gender: prof?.gender || 'Woman',
+        showGender: prof?.showGender ?? true,
+        orientation: prof?.orientation || 'Straight',
+        showOrientation: prof?.showOrientation ?? true,
         relationshipIntent: prof?.relationshipIntent || 'Long-term Relationship',
+        relationshipStatus: prof?.relationshipStatus || 'Single',
+        interests: prof?.interests || [],
+        story: prof?.story || '',
+        hasDisability: prof?.hasDisability ?? false,
+        disabilityInfo: prof?.disabilityInfo || '',
+        showDisability: prof?.showDisability ?? false,
         verified: partner.approvalStatus === 'APPROVED',
         isPremium: prof?.isPremium || false,
+        photo: prof?.photos?.[0]?.secureUrl || '',
+        photos: prof?.photos?.map((p: any) => p.secureUrl) || [],
         createdAt: m.createdAt,
       };
     });

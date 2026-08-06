@@ -192,6 +192,7 @@ export class ChatRepository {
       where: { id: messageId },
       data: {
         text,
+        isEdited: true,
         updatedAt: new Date(),
       },
     });

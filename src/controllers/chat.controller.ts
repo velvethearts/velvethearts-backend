@@ -146,6 +146,15 @@ export class ChatController {
 
       const message = await this.chatService.editMessage(messageId, req.user.userId, result.data.text);
 
+      io.to(message.conversationId).emit('message_edited', {
+        conversationId: message.conversationId,
+        messageId: message.id,
+        senderId: message.senderId,
+        text: message.text,
+        isEdited: true,
+        updatedAt: message.updatedAt,
+      });
+
       return res.status(200).json({
         success: true,
         message: 'Message updated successfully',
