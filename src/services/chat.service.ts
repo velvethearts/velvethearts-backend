@@ -147,8 +147,8 @@ export class ChatService {
         this.pushService.sendPushNotification(partner.userId, {
           title: `New Message from ${senderName}`,
           body: pushBody,
-          url: '/chat',
-          data: { conversationId, senderId }
+          url: '/?tab=chat',
+          data: { tab: 'chat', conversationId, senderId }
         }).catch(() => {});
       } catch (e) {
         // Logging skipped here to avoid pulling logger dependency into this service

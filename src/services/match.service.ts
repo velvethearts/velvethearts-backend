@@ -220,23 +220,23 @@ export class MatchService {
       this.pushService.sendPushNotification(receiverId, {
         title: 'It\'s a Connection! 💕',
         body: 'You have a new mutual match on Velvet Hearts!',
-        url: '/chat',
-        data: { conversationId: result.conversationId }
+        url: '/?tab=chat',
+        data: { tab: 'chat', conversationId: result.conversationId }
       }).catch(() => {});
 
       this.pushService.sendPushNotification(senderId, {
         title: 'It\'s a Connection! 💕',
         body: 'You have a new mutual match on Velvet Hearts!',
-        url: '/chat',
-        data: { conversationId: result.conversationId }
+        url: '/?tab=chat',
+        data: { tab: 'chat', conversationId: result.conversationId }
       }).catch(() => {});
     } else {
       // Web Push notification for single interest/like
       this.pushService.sendPushNotification(receiverId, {
         title: 'New Interest! 💕',
         body: 'Someone is interested in your profile on Velvet Hearts!',
-        url: '/notifications',
-        data: { senderId }
+        url: '/?tab=notifications',
+        data: { tab: 'notifications', senderId }
       }).catch(() => {});
     }
 
