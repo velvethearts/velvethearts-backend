@@ -152,9 +152,15 @@ export class ChatService {
         }
 
         // Web Push notification to partner
+        const senderProfile = await prisma.profile.findUnique({
+          where: { userId: senderId },
+          select: { name: true }
+        });
+        const senderName = senderProfile?.name || 'Someone';
+
         const pushBody = text || (Array.isArray(attachments) && attachments.some((a: any) => a.fileType === 'AUDIO') ? '🎤 Sent a voice note' : 'Sent an attachment');
         this.pushService.sendPushNotification(partner.userId, {
-          title: 'New Message',
+          title: `New Message from ${senderName}`,
           body: pushBody,
           url: '/chat',
           data: { conversationId, senderId }

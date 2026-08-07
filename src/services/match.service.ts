@@ -4,11 +4,13 @@ import { ActivityLogRepository } from '../repositories/activity-log.repository';
 import { ApprovalStatus, NotificationType, UserStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { io } from '../socket'; 
+import { PushService } from './push.service';
 
 export class MatchService {
   private likeRepository = new LikeRepository();
   private matchRepository = new MatchRepository();
   private logRepository = new ActivityLogRepository();
+  private pushService = new PushService();
 
   async likeProfile(senderId: string, receiverId: string) {
     if (senderId === receiverId) {
@@ -205,7 +207,7 @@ export class MatchService {
         details: JSON.stringify({ user2Id: receiverId }),
       });
 
-      // Notify both users in real time
+      // Notify both users in real time via socket
       io.to(senderId).emit('matchCreated', {
         conversationId: result.conversationId,
       });
@@ -213,6 +215,29 @@ export class MatchService {
       io.to(receiverId).emit('matchCreated', {
         conversationId: result.conversationId,
       });
+
+      // Web Push notification to both matched users
+      this.pushService.sendPushNotification(receiverId, {
+        title: 'It\'s a Connection! 💕',
+        body: 'You have a new mutual match on Velvet Hearts!',
+        url: '/chat',
+        data: { conversationId: result.conversationId }
+      }).catch(() => {});
+
+      this.pushService.sendPushNotification(senderId, {
+        title: 'It\'s a Connection! 💕',
+        body: 'You have a new mutual match on Velvet Hearts!',
+        url: '/chat',
+        data: { conversationId: result.conversationId }
+      }).catch(() => {});
+    } else {
+      // Web Push notification for single interest/like
+      this.pushService.sendPushNotification(receiverId, {
+        title: 'New Interest! 💕',
+        body: 'Someone is interested in your profile on Velvet Hearts!',
+        url: '/notifications',
+        data: { senderId }
+      }).catch(() => {});
     }
 
     return result;

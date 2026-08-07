@@ -6,6 +6,12 @@ import { prisma } from './config/database';
 
 export let io: SocketServer;
 
+export function isUserActiveOnline(userId: string): boolean {
+  if (!io) return false;
+  const room = io.sockets.adapter.rooms.get(userId);
+  return Boolean(room && room.size > 0);
+}
+
 export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
   io = new SocketServer(httpServer, {
     cors: {

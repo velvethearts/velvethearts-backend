@@ -1,6 +1,7 @@
 import webpush from 'web-push';
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
+import { isUserActiveOnline } from '../socket';
 
 // Default development VAPID keys fallback if env vars are unset
 const defaultVapid = webpush.generateVAPIDKeys();
@@ -51,8 +52,14 @@ export class PushService {
 
   async sendPushNotification(
     userId: string,
-    payload: { title: string; body: string; icon?: string; url?: string; data?: any }
+    payload: { title: string; body: string; icon?: string; url?: string; data?: any },
+    onlyIfOffline: boolean = true
   ) {
+    if (onlyIfOffline && isUserActiveOnline(userId)) {
+      logger.info(`Skipping Web Push for userId ${userId} because user is actively online in app`);
+      return;
+    }
+
     const subscriptions = await prisma.pushSubscription.findMany({
       where: { userId },
     });
