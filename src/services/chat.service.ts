@@ -77,22 +77,7 @@ export class ChatService {
     // Fetch messages using canonical conversation.id
     const messages = await this.chatRepository.findMessagesByConversation(conversation.id, limit, page);
 
-    // Update last read receipt for user
-    await this.chatRepository.updateLastRead(conversation.id, userId);
-
     const partnerLastReadAt = partner?.lastReadAt ? new Date(partner.lastReadAt) : null;
-    const seenAt = new Date().toISOString();
-
-    // Emit real-time read receipt to partner if online
-    if (io && partner) {
-      const seenPayload = {
-        conversationId: conversation.id,
-        readerId: userId,
-        seenAt,
-      };
-      io.to(conversation.id).emit('messages_seen', seenPayload);
-      io.to(partner.userId).emit('messages_seen', seenPayload);
-    }
 
     return messages
       .filter((m) => !m.isDeleted)
