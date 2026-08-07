@@ -40,6 +40,7 @@ model User {
   previousUser    User?                     @relation("UserHistory", fields: [previousUserId], references: [id])
   nextUsers       User[]                    @relation("UserHistory")
   settings        UserSettings?
+  pushSubscriptions PushSubscription[]
 
   @@index([phoneNumber, status])
   @@index([email, status])
@@ -256,6 +257,18 @@ model ActivityLog {
   createdAt DateTime @default(now())
   admin     User?    @relation("AdminLogs", fields: [adminId], references: [id])
   user      User?    @relation("UserLogs", fields: [userId], references: [id])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 enum Role {

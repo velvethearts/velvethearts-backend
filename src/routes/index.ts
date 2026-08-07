@@ -12,6 +12,7 @@ import { AdminController } from '../controllers/admin.controller';
 import { UploadController } from '../controllers/upload.controller';
 import { SearchController } from '../controllers/search.controller';
 import { NotificationController } from '../controllers/notification.controller';
+import { PushController } from '../controllers/push.controller';
 
 // Middlewares
 import { requireAuth, requireRole } from '../middlewares/auth.middleware';
@@ -36,6 +37,7 @@ const safetyCtrl = new SafetyController();
 const adminCtrl = new AdminController();
 const uploadCtrl = new UploadController();
 const notifCtrl = new NotificationController();
+const pushCtrl = new PushController();
 
 // ==========================================
 // AUTH ROUTES
@@ -99,12 +101,17 @@ router.get('/chat/conversations/:conversationId/typing', requireAuth, chatCtrl.g
 router.post('/upload', requireAuth, upload.any(), uploadCtrl.uploadPhoto);
 
 // ==========================================
-// NOTIFICATION ROUTES
+// NOTIFICATION & PUSH ROUTES
 // ==========================================
 router.get('/notifications', requireAuth, notifCtrl.getNotifications);
 router.post('/notifications/:id/read', requireAuth, notifCtrl.markRead);
 router.post('/notifications/read-all', requireAuth, notifCtrl.markAllRead);
 router.delete('/notifications/:id', requireAuth, notifCtrl.deleteNotification);
+
+// Web Push API
+router.get('/push/vapid-public-key', pushCtrl.getVapidPublicKey);
+router.post('/push/subscribe', requireAuth, pushCtrl.subscribe);
+router.post('/push/unsubscribe', requireAuth, pushCtrl.unsubscribe);
 
 // ==========================================
 // ADMIN DASHBOARD ROUTES

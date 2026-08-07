@@ -4,10 +4,13 @@ import { BlockRepository } from '../repositories/block.repository';
 import { io } from '../socket';
 import { prisma } from '../config/database';
 
+import { PushService } from './push.service';
+
 export class ChatService {
   private chatRepository = new ChatRepository();
   private notificationRepository = new NotificationRepository();
   private blockRepository = new BlockRepository();
+  private pushService = new PushService();
 
   async getConversations(userId: string) {
     const list = await this.chatRepository.findUserConversations(userId);
@@ -147,6 +150,15 @@ export class ChatService {
           io.to(partner.userId).emit('new_message', socketMessagePayload);
           io.to(senderId).emit('new_message', socketMessagePayload);
         }
+
+        // Web Push notification to partner
+        const pushBody = text || (Array.isArray(attachments) && attachments.some((a: any) => a.fileType === 'AUDIO') ? '🎤 Sent a voice note' : 'Sent an attachment');
+        this.pushService.sendPushNotification(partner.userId, {
+          title: 'New Message',
+          body: pushBody,
+          url: '/chat',
+          data: { conversationId, senderId }
+        }).catch(() => {});
       } catch (e) {
         // Logging skipped here to avoid pulling logger dependency into this service
       }
