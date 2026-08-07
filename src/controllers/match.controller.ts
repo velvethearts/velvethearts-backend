@@ -6,6 +6,8 @@ import { z } from 'zod';
 
 const likeSchema = z.object({
   receiverId: z.string().uuid('Invalid profile user ID'),
+  isSuper: z.boolean().optional().default(false),
+  comment: z.string().max(500).optional().nullable(),
 });
 
 const unmatchSchema = z.object({
@@ -26,7 +28,12 @@ export class MatchController {
         return res.status(400).json({ success: false, message: result.error.errors[0].message });
       }
 
-      const data = await this.matchService.likeProfile(req.user.userId, result.data.receiverId);
+      const data = await this.matchService.likeProfile(
+        req.user.userId,
+        result.data.receiverId,
+        result.data.isSuper,
+        result.data.comment || null
+      );
 
       return res.status(200).json({
         success: true,
@@ -120,6 +127,24 @@ export class MatchController {
     } catch (error: any) {
       logger.error('getReceivedInvites controller failure:', error);
       return res.status(500).json({ success: false, message: error.message || 'Retrieving received invites failed' });
+    }
+  };
+
+  getSentInvites = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const invites = await this.matchService.getSentInvites(req.user.userId);
+
+      return res.status(200).json({
+        success: true,
+        data: invites,
+      });
+    } catch (error: any) {
+      logger.error('getSentInvites controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Retrieving sent invites failed' });
     }
   };
 }

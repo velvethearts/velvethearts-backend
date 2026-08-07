@@ -12,7 +12,7 @@ export class MatchService {
   private logRepository = new ActivityLogRepository();
   private pushService = new PushService();
 
-  async likeProfile(senderId: string, receiverId: string) {
+  async likeProfile(senderId: string, receiverId: string, isSuper: boolean = false, comment: string | null = null) {
     if (senderId === receiverId) {
       throw new Error('You cannot like your own profile');
     }
@@ -47,11 +47,13 @@ export class MatchService {
 
     // Run matching logic in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Save Like
+      // 1. Save Like with optional comment
       await tx.like.create({
         data: {
           senderId,
-          receiverId
+          receiverId,
+          isSuper: Boolean(isSuper),
+          comment: comment || null,
         }
       });
 
@@ -355,15 +357,25 @@ export class MatchService {
       excludedSenderIds.add(match.user1Id === userId ? match.user2Id : match.user1Id);
     });
 
+    const blocks = await prisma.block.findMany({
+      where: {
+        OR: [{ blockerId: userId }, { blockedId: userId }],
+      },
+    });
+    blocks.forEach((b) => {
+      excludedSenderIds.add(b.blockerId === userId ? b.blockedId : b.blockerId);
+    });
+
     const receivedLikes = await prisma.like.findMany({
       where: {
         receiverId: userId,
         senderId: {
           notIn: Array.from(excludedSenderIds),
+          not: userId,
         },
         sender: {
           status: UserStatus.ACTIVE,
-          approvalStatus: ApprovalStatus.APPROVED,
+          approvalStatus: { not: ApprovalStatus.REJECTED },
           profile: {
             isNot: null,
           },
@@ -403,6 +415,8 @@ export class MatchService {
         id: user.id,
         inviteId: like.id,
         invitedAt: like.createdAt,
+        isSuper: Boolean(like.isSuper),
+        isSuperSpark: Boolean(like.isSuper),
         name: prof.name,
         age,
         city: prof.city,
@@ -425,6 +439,82 @@ export class MatchService {
         photo: prof.photos[0]?.secureUrl || '',
         photos: prof.photos.map((p) => p.secureUrl),
         promptAnswers: prof.promptAnswers,
+      };
+    });
+  }
+
+  async getSentInvites(userId: string) {
+    const activeMatches = await this.matchRepository.findActiveMatchesByUser(userId);
+    const matchedUserIds = new Set<string>();
+    activeMatches.forEach((m) => {
+      matchedUserIds.add(m.user1Id === userId ? m.user2Id : m.user1Id);
+    });
+
+    const blocks = await prisma.block.findMany({
+      where: {
+        OR: [{ blockerId: userId }, { blockedId: userId }],
+      },
+    });
+    blocks.forEach((b) => {
+      matchedUserIds.add(b.blockerId === userId ? b.blockedId : b.blockerId);
+    });
+
+    const sentLikes = await prisma.like.findMany({
+      where: {
+        senderId: userId,
+        receiverId: {
+          notIn: Array.from(matchedUserIds),
+          not: userId,
+        },
+        receiver: {
+          status: UserStatus.ACTIVE,
+          approvalStatus: { not: ApprovalStatus.REJECTED },
+          profile: { isNot: null },
+        },
+      },
+      include: {
+        receiver: {
+          include: {
+            profile: {
+              include: {
+                photos: { orderBy: { photoOrder: 'asc' } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return sentLikes.map((like) => {
+      const user = like.receiver;
+      const prof = user.profile!;
+      let age = 21;
+      if (prof?.dob) {
+        const dobDate = new Date(prof.dob);
+        const today = new Date();
+        let calculatedAge = today.getFullYear() - dobDate.getFullYear();
+        const mDiff = today.getMonth() - dobDate.getMonth();
+        if (mDiff < 0 || (mDiff === 0 && today.getDate() < dobDate.getDate())) calculatedAge--;
+        age = calculatedAge;
+      }
+
+      return {
+        id: user.id,
+        inviteId: like.id,
+        invitedAt: like.createdAt,
+        isSuper: Boolean(like.isSuper),
+        isSuperSpark: Boolean(like.isSuper),
+        name: prof.name,
+        age,
+        city: prof.city,
+        gender: prof.gender,
+        relationshipIntent: prof.relationshipIntent,
+        relationshipStatus: prof.relationshipStatus,
+        interests: prof.interests || [],
+        story: prof.story || '',
+        photo: prof.photos[0]?.secureUrl || '',
+        photos: prof.photos.map((p) => p.secureUrl),
       };
     });
   }

@@ -91,7 +91,7 @@ export class DiscoverService {
         notIn: Array.from(excludeIds),
       },
       status: UserStatus.ACTIVE,
-      approvalStatus: ApprovalStatus.APPROVED,
+      approvalStatus: { not: ApprovalStatus.REJECTED },
       profile: {
         isNot: null,
       },
@@ -100,15 +100,19 @@ export class DiscoverService {
     const profileFilters: any = {};
 
     if (filters.gender && filters.gender !== 'All') {
-      profileFilters.gender = {
-        equals: filters.gender,
-        mode: 'insensitive',
-      };
+      const g = filters.gender.toLowerCase();
+      if (g === 'woman' || g === 'female') {
+        profileFilters.gender = { in: ['Woman', 'woman', 'Female', 'female', 'Women', 'women'] };
+      } else if (g === 'man' || g === 'male') {
+        profileFilters.gender = { in: ['Man', 'man', 'Male', 'male', 'Men', 'men'] };
+      } else {
+        profileFilters.gender = { contains: filters.gender, mode: 'insensitive' };
+      }
     }
 
     if (filters.relationshipIntent && filters.relationshipIntent !== 'All') {
       profileFilters.relationshipIntent = {
-        equals: filters.relationshipIntent,
+        contains: filters.relationshipIntent.trim(),
         mode: 'insensitive',
       };
     }

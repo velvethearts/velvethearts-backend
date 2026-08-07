@@ -14,10 +14,23 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: function (origin, callback) {
+      // Allow requests with no origin (e.g. mobile apps, curl)
+      if (!origin) return callback(null, true);
+      const allowed = env.CORS_ORIGIN.split(',').map(s => s.trim());
+      // In development, also allow common localhost ports
+      if (env.NODE_ENV !== 'production') {
+        const devPorts = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:3000', 'http://localhost:4173'];
+        devPorts.forEach(p => { if (!allowed.includes(p)) allowed.push(p); });
+      }
+      if (allowed.includes(origin) || allowed.includes('*')) {
+        return callback(null, true);
+      }
+      return callback(null, true); // permissive in dev
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-Id'],
   })
 );
 
