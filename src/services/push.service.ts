@@ -57,7 +57,12 @@ export class PushService {
       where: { userId },
     });
 
-    if (subscriptions.length === 0) return;
+    if (subscriptions.length === 0) {
+      logger.info(`No active PushSubscriptions found for target userId: ${userId}`);
+      return;
+    }
+
+    logger.info(`Sending Web Push notification to ${subscriptions.length} subscription(s) for userId: ${userId}`);
 
     const pushPayload = JSON.stringify({
       title: payload.title,
@@ -82,8 +87,9 @@ export class PushService {
 
       try {
         await webpush.sendNotification(pushSub, pushPayload);
+        logger.info(`✅ Web Push notification delivered to endpoint: ${sub.endpoint.slice(0, 45)}...`);
       } catch (error: any) {
-        logger.warn(`Push notification failed for endpoint ${sub.endpoint}:`, error?.statusCode || error?.message);
+        logger.warn(`❌ Push notification failed for endpoint ${sub.endpoint.slice(0, 45)}...:`, error?.statusCode || error?.message);
         // Clean up expired or invalid subscriptions (404 Not Found or 410 Gone)
         if (error?.statusCode === 404 || error?.statusCode === 410) {
           await this.unsubscribe(sub.endpoint);
