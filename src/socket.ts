@@ -119,6 +119,18 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }
     });
 
+    // Handle Nudge Spark
+    socket.on('nudge_spark', async ({ targetUserId, senderName }: { targetUserId: string; senderName?: string }) => {
+      if (targetUserId) {
+        io.to(targetUserId).emit('spark_nudged', {
+          senderId: userId,
+          senderName: senderName || 'Someone',
+          message: `${senderName || 'Someone'} nudged your spark! Say hi 👋`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
     socket.on('disconnect', () => {
       const count = userSocketCounts.get(userId) || 1;
       if (count <= 1) {

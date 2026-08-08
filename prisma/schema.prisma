@@ -71,6 +71,7 @@ model Profile {
   education          String?
   languages          String[]
   occupation         String?
+  voiceIntroUrl      String?
   photos             Photo[]
   user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   promptAnswers      PromptAnswer[]

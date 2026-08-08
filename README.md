@@ -1,6 +1,6 @@
 # Velvet Hearts Backend
 
-Last updated: July 14, 2026  
+Last updated: August 8th, 2026  
 Source of truth: `/docs/Administrator_Manual.docx` and `/docs/User_Manual.docx`
 
 This folder contains the Velvet Hearts backend service. It is a TypeScript Express application that provides REST APIs, authentication token issuance, approval enforcement, admin workflows, moderation workflows, Cloudinary upload brokering, Prisma database access, and Socket.IO realtime behavior.
@@ -237,8 +237,8 @@ prisma/schema.prisma
 
 The schema includes:
 
-- Users, profiles, photos, prompt answers, and settings.
-- Likes and matches.
+- Users, profiles, photos, 2-minute voice intro snippet (`voiceIntroUrl`), prompt answers, and settings.
+- Likes and matches (with `createdAt` timestamps used for 24h spark countdown calculations).
 - Conversations, participants, messages, attachments, and reactions.
 - Blocks and reports.
 - Notifications.
@@ -347,7 +347,10 @@ Uploads go through:
 POST /api/v1/upload
 ```
 
-The route uses Multer with a 10 MB file-size limit. `UploadService` streams the file buffer to Cloudinary and returns Cloudinary metadata such as secure URL, public ID, width, and height.
+The route uses Multer with a 10 MB file-size limit. `UploadService` streams the file buffer or audio blob to Cloudinary and returns Cloudinary metadata such as secure URL, public ID, width, height, and resource type.
+
+- **Profile Photos**: Supported formats include JPEG, PNG, WEBP.
+- **Voice Intro Snippets (`voiceIntroUrl`)**: Supports up to 2-minute audio recordings (Base64 data URLs or binary audio blobs) uploaded during onboarding or profile editing. Passing `voiceIntroUrl: null` to `POST /profile` removes the existing recording from the profile record.
 
 Cloudinary API secret must stay backend-only.
 

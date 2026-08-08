@@ -136,14 +136,40 @@ export class MatchService {
           });
         }
 
-        // Create opening system/connection message
-        await tx.message.create({
-          data: {
-            conversationId: conversation.id,
-            senderId: receiverId,
-            text: `It's a connection! I read your story and would love to get to know you.`
-          }
-        });
+        // Create opening comments/messages or connection icebreaker
+        let messagesCreated = 0;
+
+        if (mutualLike.comment) {
+          await tx.message.create({
+            data: {
+              conversationId: conversation.id,
+              senderId: receiverId,
+              text: mutualLike.comment
+            }
+          });
+          messagesCreated++;
+        }
+
+        if (comment) {
+          await tx.message.create({
+            data: {
+              conversationId: conversation.id,
+              senderId: senderId,
+              text: comment
+            }
+          });
+          messagesCreated++;
+        }
+
+        if (messagesCreated === 0) {
+          await tx.message.create({
+            data: {
+              conversationId: conversation.id,
+              senderId: receiverId,
+              text: `It's a connection! I read your story and would love to get to know you.`
+            }
+          });
+        }
 
         // Dispatch Match Notifications
         await tx.notification.createMany({

@@ -152,8 +152,7 @@ export class DiscoverService {
 
     if (Object.keys(profileFilters).length > 0) {
       whereClause.profile = {
-        ...whereClause.profile,
-        ...profileFilters,
+        is: profileFilters,
       };
     }
 
@@ -221,16 +220,27 @@ export class DiscoverService {
     const ageMax = filters.ageMax ?? 100;
     mapped = mapped.filter((c) => c.age >= ageMin && c.age <= ageMax);
 
+    // Filter by maximum distance if provided
+    if ((filters as any).distanceMax) {
+      const maxD = Number((filters as any).distanceMax);
+      if (!isNaN(maxD)) {
+        mapped = mapped.filter((c) => {
+          const d = parseFloat(c.distance);
+          return isNaN(d) || d <= maxD;
+        });
+      }
+    }
+
     // Apply sorting
     if (sortBy === 'newest') {
-      mapped.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } else if (sortBy === 'profileCompletion') {
       mapped.sort((a, b) => b.profileCompletion - a.profileCompletion);
     } else if (sortBy === 'name') {
       mapped.sort((a, b) => a.name.localeCompare(b.name));
     } else {
-      // Default: mix of newest and complete profiles
-      mapped.sort((a, b) => b.profileCompletion - a.profileCompletion || b.createdAt.getTime() - a.createdAt.getTime());
+      // Default: mix of complete profiles and newest
+      mapped.sort((a, b) => b.profileCompletion - a.profileCompletion || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
 
     // Apply Pagination
