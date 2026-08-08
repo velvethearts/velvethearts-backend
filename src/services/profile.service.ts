@@ -23,6 +23,7 @@ export interface ProfileInput {
   disabilityInfo?: string;
   showDisability?: boolean;
   photos: string[];
+  voiceIntroUrl?: string | null;
   languages?: string[];
   education?: string;
   occupation?: string;
@@ -64,6 +65,7 @@ export class ProfileService {
       verified: profile.verified,
       isPremium: profile.isPremium,
       photos: profile.photos.map((p) => p.secureUrl),
+      voiceIntroUrl: profile.voiceIntroUrl || null,
       profileCompletion: calculateProfileCompletion(profile),
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
@@ -94,6 +96,7 @@ export class ProfileService {
           disabilityInfo: data.disabilityInfo,
           showDisability: data.showDisability ?? false,
           interests: data.interests,
+          voiceIntroUrl: data.voiceIntroUrl !== undefined ? data.voiceIntroUrl : undefined,
           languages: data.languages || [],
           education: data.education || null,
           occupation: data.occupation || null,
@@ -114,6 +117,7 @@ export class ProfileService {
           disabilityInfo: data.disabilityInfo,
           showDisability: data.showDisability ?? false,
           interests: data.interests,
+          voiceIntroUrl: data.voiceIntroUrl || null,
           languages: data.languages || [],
           education: data.education || null,
           occupation: data.occupation || null,

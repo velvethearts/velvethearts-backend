@@ -18,6 +18,7 @@ const saveProfileSchemaBase = z.object({
   disabilityInfo: z.string().optional(),
   showDisability: z.boolean().optional().default(false),
   photos: z.array(z.string()).min(1, 'Upload at least 1 photo'),
+  voiceIntroUrl: z.string().optional().nullable(),
   languages: z.array(z.string()).optional(),
   education: z.string().optional(),
   occupation: z.string().optional(),
