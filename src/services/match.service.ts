@@ -350,6 +350,7 @@ export class MatchService {
 
       return {
         id: partner.id,
+        userId: partner.id,
         matchId: m.id,
         name: prof?.name || 'Velvet Hearts Member',
         age,
@@ -369,6 +370,7 @@ export class MatchService {
         isPremium: prof?.isPremium || false,
         photo: prof?.photos?.[0]?.secureUrl || '',
         photos: prof?.photos?.map((p: any) => p.secureUrl) || [],
+        voiceIntroUrl: prof?.voiceIntroUrl || null,
         createdAt: m.createdAt,
       };
     });
@@ -439,6 +441,7 @@ export class MatchService {
 
       return {
         id: user.id,
+        userId: user.id,
         inviteId: like.id,
         invitedAt: like.createdAt,
         isSuper: Boolean(like.isSuper),
@@ -464,6 +467,7 @@ export class MatchService {
         isPremium: prof.isPremium,
         photo: prof.photos[0]?.secureUrl || '',
         photos: prof.photos.map((p) => p.secureUrl),
+        voiceIntroUrl: prof.voiceIntroUrl || null,
         promptAnswers: prof.promptAnswers,
       };
     });
@@ -527,6 +531,7 @@ export class MatchService {
 
       return {
         id: user.id,
+        userId: user.id,
         inviteId: like.id,
         invitedAt: like.createdAt,
         isSuper: Boolean(like.isSuper),
@@ -541,6 +546,7 @@ export class MatchService {
         story: prof.story || '',
         photo: prof.photos[0]?.secureUrl || '',
         photos: prof.photos.map((p) => p.secureUrl),
+        voiceIntroUrl: prof.voiceIntroUrl || null,
       };
     });
   }

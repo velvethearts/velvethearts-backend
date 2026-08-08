@@ -189,6 +189,7 @@ export class DiscoverService {
 
       return {
         id: u.id,
+        userId: u.id,
         name: prof.name,
         age,
         city: prof.city,
@@ -209,6 +210,7 @@ export class DiscoverService {
         verified: u.approvalStatus === ApprovalStatus.APPROVED,
         isPremium: prof.isPremium,
         photos: prof.photos.map((p) => p.secureUrl),
+        voiceIntroUrl: prof.voiceIntroUrl || null,
         profileCompletion: calculateProfileCompletion(prof),
         distance: `${randDist} km`,
         createdAt: u.createdAt,
