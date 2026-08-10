@@ -303,17 +303,17 @@ All routes are mounted under:
 | Profile | `GET /profile/me` | User | Fetch own user/profile data. |
 | Profile | `POST /profile` | User | Create/update profile. |
 | Profile | `DELETE /profile` | User | Soft-delete own account. |
-| Discover | `GET /discover` | Approved user | Discover recommendations. |
+| Discover | `GET /discover` | Approved user | Discover recommendations (parallelized exclusions via `Promise.all`). |
 | Search | `GET /search` | Approved user | Profile search. |
-| Match | `POST /match/like` | Approved user | Send interest. |
+| Match | `POST /match/like` | Approved user | Send interest (validates target active status). |
 | Match | `POST /match/unlike` | Approved user | Undo interest. |
 | Match | `POST /match/unmatch` | Approved user | End match. |
-| Match | `GET /match/connections` | Approved user | Mutual connections. |
+| Match | `GET /match/connections` | Approved user | Mutual connections (filters out deleted/inactive partners). |
 | Safety | `POST /block` | User | Block user. |
 | Safety | `POST /safety/reports` | User | Report user and auto-block. |
-| Chat | `GET /chat/conversations` | Approved user | Conversation list. |
+| Chat | `GET /chat/conversations` | Approved user | Conversation list (filters out deleted/inactive partners). |
 | Chat | `GET /chat/conversations/:conversationId/messages` | Approved user | Message history. |
-| Chat | `POST /chat/conversations/:conversationId/messages` | Approved user | Send message. |
+| Chat | `POST /chat/conversations/:conversationId/messages` | Approved user | Send message (non-blocking background Web Push dispatch). |
 | Upload | `POST /upload` | User | Upload profile/media image. |
 | Notifications | `GET /notifications` | User | Notification list. |
 | Admin | `/admin/*` | Admin/Super Admin | Admin operations. |
