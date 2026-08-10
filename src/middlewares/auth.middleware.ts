@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import { prisma } from '../config/database';
 import { firebaseAuth } from '../config/firebase';
+import { env } from '../config/env';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -26,28 +27,37 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     let user: any = null;
 
     if (token.startsWith('dev-google:')) {
-      const email = token.replace('dev-google:', '');
+      // Dev tokens are strictly disallowed in production or when ENABLE_DEV_AUTH is false
+      if (env.NODE_ENV === 'production' || !env.ENABLE_DEV_AUTH) {
+        logger.warn('dev-google token rejected in production or when dev auth disabled');
+        return res.status(401).json({ success: false, message: 'Invalid or expired access token' });
+      }
+
+      const email = token.replace('dev-google:', '').trim();
+      if (!email) {
+        return res.status(401).json({ success: false, message: 'Invalid or expired access token' });
+      }
+
       user = await prisma.user.findFirst({ where: { email } });
       if (!user) {
-        user = await prisma.user.findFirst({ where: { status: 'ACTIVE' } });
+        return res.status(401).json({ success: false, message: 'Invalid or expired access token' });
       }
     } else {
+      let decoded: any;
       try {
-        const decoded = await firebaseAuth().verifyIdToken(token);
-        user = await prisma.user.findUnique({
-          where: { firebaseUid: decoded.uid }
-        });
+        decoded = await firebaseAuth().verifyIdToken(token);
       } catch (err: any) {
-        if (process.env.NODE_ENV !== 'production') {
-          user = await prisma.user.findFirst({ where: { status: 'ACTIVE' } });
-        } else {
-          throw err;
-        }
+        logger.warn('Firebase token verification failed:', err.message);
+        return res.status(401).json({ success: false, message: 'Invalid or expired access token' });
       }
+
+      user = await prisma.user.findUnique({
+        where: { firebaseUid: decoded.uid }
+      });
     }
 
     if (!user) {
-      return res.status(401).json({ success: false, message: 'User not found' });
+      return res.status(401).json({ success: false, message: 'Invalid or expired access token' });
     }
 
     if (user.status === 'DELETED') {
@@ -58,11 +68,12 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
       return res.status(403).json({ success: false, message: 'Your account has been suspended' });
     }
     
+    // Informational device ID update (does NOT grant identity or bypass auth)
     const deviceIdHeader = (req.headers['x-device-id'] || req.headers['X-Device-Id']) as string | undefined;
-    if (deviceIdHeader && user.deviceId !== deviceIdHeader) {
+    if (deviceIdHeader && typeof deviceIdHeader === 'string' && user.deviceId !== deviceIdHeader) {
       prisma.user.update({
         where: { id: user.id },
-        data: { deviceId: deviceIdHeader }
+        data: { deviceId: deviceIdHeader.trim() }
       }).catch(err => logger.error('Failed updating deviceId:', err));
     }
 
@@ -73,8 +84,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     };
     return next();
   } catch (error: any) {
-    console.log(error);
-    logger.debug('Firebase token validation failed:', error.message);
+    logger.error('Authentication error:', error.message);
     return res.status(401).json({ success: false, message: 'Invalid or expired access token' });
   }
 }

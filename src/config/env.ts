@@ -11,6 +11,7 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string(),
   CLOUDINARY_API_SECRET: z.string(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  ENABLE_DEV_AUTH: z.coerce.boolean().default(false),
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_PRIVATE_KEY: z.string().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().optional(),

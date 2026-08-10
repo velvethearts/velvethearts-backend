@@ -3,6 +3,7 @@ import { Server as SocketServer } from 'socket.io';
 import { logger } from './utils/logger';
 import { firebaseAuth } from './config/firebase';
 import { prisma } from './config/database';
+import { env } from './config/env';
 
 export let io: SocketServer;
 
@@ -46,28 +47,29 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
       let user: any = null;
 
       if (token.startsWith('dev-google:')) {
-        const email = token.replace('dev-google:', '');
+        if (env.NODE_ENV === 'production' || !env.ENABLE_DEV_AUTH) {
+          return next(new Error('Invalid or expired authentication token'));
+        }
+        const email = token.replace('dev-google:', '').trim();
+        if (!email) {
+          return next(new Error('Invalid or expired authentication token'));
+        }
         user = await prisma.user.findFirst({ where: { email } });
-        if (!user) {
-          user = await prisma.user.findFirst({ where: { status: 'ACTIVE' } });
-        }
       } else {
+        let decoded: any;
         try {
-          const decoded = await firebaseAuth().verifyIdToken(token);
-          user = await prisma.user.findUnique({
-            where: { firebaseUid: decoded.uid },
-          });
+          decoded = await firebaseAuth().verifyIdToken(token);
         } catch (err: any) {
-          if (process.env.NODE_ENV !== 'production') {
-            user = await prisma.user.findFirst({ where: { status: 'ACTIVE' } });
-          } else {
-            throw err;
-          }
+          return next(new Error('Invalid or expired authentication token'));
         }
+
+        user = await prisma.user.findUnique({
+          where: { firebaseUid: decoded.uid },
+        });
       }
 
-      if (!user) {
-        return next(new Error('User not found'));
+      if (!user || user.status !== 'ACTIVE') {
+        return next(new Error('User not found or account inactive'));
       }
 
       socket.data.userId = user.id;

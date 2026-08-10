@@ -3,6 +3,7 @@ import { UserRepository } from '../repositories/user.repository';
 import { EmailService } from './email.service';
 import { prisma } from '../config/database';
 import { firebaseAuth } from '../config/firebase';
+import { env } from '../config/env';
 import { ApprovalStatus, Role, User, UserStatus } from '@prisma/client';
 
 interface FirebaseUserInfo {
@@ -21,7 +22,13 @@ export class AuthService {
 
   private async verifyFirebaseIdToken(firebaseIdToken: string): Promise<FirebaseUserInfo> {
     if (firebaseIdToken.startsWith('dev-google:')) {
-      const email = firebaseIdToken.replace('dev-google:', '');
+      if (env.NODE_ENV === 'production' || !env.ENABLE_DEV_AUTH) {
+        throw new Error('Development authentication is disabled');
+      }
+      const email = firebaseIdToken.replace('dev-google:', '').trim();
+      if (!email) {
+        throw new Error('Invalid development authentication token');
+      }
       return {
         uid: `dev_uid_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
         email: email,
@@ -29,25 +36,14 @@ export class AuthService {
       };
     }
 
-    try {
-      const decoded = await firebaseAuth().verifyIdToken(firebaseIdToken);
-      return {
-        uid: decoded.uid,
-        email: decoded.email?.trim(),
-        name: decoded.name,
-        picture: decoded.picture,
-        phoneNumber: decoded.phone_number?.trim(),
-      };
-    } catch (err: any) {
-      if (process.env.NODE_ENV !== 'production') {
-        return {
-          uid: 'dev_default_uid',
-          email: 'test-onboard@gmail.com',
-          name: 'Dev User',
-        };
-      }
-      throw err;
-    }
+    const decoded = await firebaseAuth().verifyIdToken(firebaseIdToken);
+    return {
+      uid: decoded.uid,
+      email: decoded.email?.trim(),
+      name: decoded.name,
+      picture: decoded.picture,
+      phoneNumber: decoded.phone_number?.trim(),
+    };
   }
 
   async authenticateFirebaseUser(

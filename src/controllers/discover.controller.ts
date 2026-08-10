@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { DiscoverService, DiscoverFilters } from '../services/discover.service';
@@ -62,7 +63,16 @@ export class DiscoverController {
   runDiscoverNudge = async (req: AuthenticatedRequest, res: Response) => {
     try {
       const secret = req.headers['x-cron-secret'] as string | undefined;
-      if (!process.env.CRON_SECRET || process.env.CRON_SECRET !== secret) {
+      const expectedSecret = process.env.CRON_SECRET;
+
+      if (!expectedSecret || !secret) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
+
+      const secretBuffer = Buffer.from(secret);
+      const expectedBuffer = Buffer.from(expectedSecret);
+
+      if (secretBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(secretBuffer, expectedBuffer)) {
         return res.status(403).json({ success: false, message: 'Forbidden' });
       }
 

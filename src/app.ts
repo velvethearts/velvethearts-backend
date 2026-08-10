@@ -15,18 +15,23 @@ app.use(helmet());
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (e.g. mobile apps, curl)
+      // Allow requests with no origin (e.g. server-to-server, mobile apps, curl)
       if (!origin) return callback(null, true);
-      const allowed = env.CORS_ORIGIN.split(',').map(s => s.trim());
-      // In development, also allow common localhost ports
+
+      const allowed = env.CORS_ORIGIN.split(',').map(s => s.trim()).filter(Boolean);
+
+      // In non-production, include explicit local development origins
       if (env.NODE_ENV !== 'production') {
         const devPorts = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:3000', 'http://localhost:4173'];
         devPorts.forEach(p => { if (!allowed.includes(p)) allowed.push(p); });
       }
-      if (allowed.includes(origin) || allowed.includes('*')) {
+
+      if (allowed.includes(origin)) {
         return callback(null, true);
       }
-      return callback(null, true); // permissive in dev
+
+      logger.warn(`CORS rejected request from origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
