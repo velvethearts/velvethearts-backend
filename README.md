@@ -1,6 +1,6 @@
 # Velvet Hearts Backend
 
-Last updated: August 8th, 2026  
+Last updated: August 10th, 2026  
 Source of truth: `/docs/Administrator_Manual.docx` and `/docs/User_Manual.docx`
 
 This folder contains the Velvet Hearts backend service. It is a TypeScript Express application that provides REST APIs, authentication token issuance, approval enforcement, admin workflows, moderation workflows, Cloudinary upload brokering, Prisma database access, and Socket.IO realtime behavior.
@@ -20,13 +20,13 @@ The backend is the application authority for users, roles, approval status, acco
 | `src/middlewares/rate-limiter.middleware.ts` | Rate limiters for auth, likes, chat, reports, search, and discover. |
 | `src/middlewares/error.middleware.ts` | Central error response handling. |
 | `src/controllers` | HTTP request/response layer. |
-| `src/services` | Business logic for auth, profile, discover, match, chat, safety, admin, upload, search, and notifications. |
+| `src/services` | Business logic for auth, profile (including `sparkNote` update logic), discover, match (returning `sparkNote` for active connections), chat, safety, admin, upload, search, and notifications. |
 | `src/repositories` | Database access helpers around Prisma models. |
 | `src/socket.ts` | Socket.IO server setup, JWT socket authentication, conversation rooms, and typing events. |
 | `src/utils/jwt.ts` | Access/refresh token generation and verification. |
 | `src/utils/logger.ts` | Winston logger setup. |
-| `src/validators` | Zod request validation schemas. |
-| `prisma/schema.prisma` | PostgreSQL schema, Prisma models, relationships, and enums. |
+| `src/validators` | Zod request validation schemas (including `sparkNote` 20-character limit validation). |
+| `prisma/schema.prisma` | PostgreSQL schema, Prisma models (with `sparkNote` & `sparkNoteUpdatedAt` fields), relationships, and enums. |
 | `prisma/migrations` | Prisma migration history. |
 | `package.json` | Scripts and backend dependencies. |
 | `tsconfig.json` | TypeScript compiler configuration. |
