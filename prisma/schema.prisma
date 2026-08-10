@@ -175,6 +175,9 @@ model Message {
   conversationId String
   senderId       String
   text           String?
+  replyToId      String?
+  replyTo        Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]         @relation("MessageReplies")
   isEdited       Boolean           @default(false)
   isDeleted      Boolean           @default(false)
   deletedAt      DateTime?

@@ -12,6 +12,20 @@ export function isUserActiveOnline(userId: string): boolean {
   return Boolean(room && room.size > 0);
 }
 
+export function isUserInConversationRoom(conversationId: string, userId: string): boolean {
+  if (!io) return false;
+  const room = io.sockets.adapter.rooms.get(conversationId);
+  if (!room) return false;
+
+  for (const socketId of room) {
+    const socket = io.sockets.sockets.get(socketId);
+    if (socket && socket.data.userId === userId) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
   io = new SocketServer(httpServer, {
     cors: {

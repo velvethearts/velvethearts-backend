@@ -331,9 +331,14 @@ export class MatchService {
   async getConnections(userId: string) {
     const activeMatches = await this.matchRepository.findActiveMatchesByUser(userId);
 
-    return activeMatches.map((m) => {
-      const partner = m.user1Id === userId ? m.user2 : m.user1;
-      const prof = partner.profile;
+    return activeMatches
+      .filter((m) => {
+        const partner = m.user1Id === userId ? m.user2 : m.user1;
+        return partner && partner.status === UserStatus.ACTIVE && partner.profile;
+      })
+      .map((m) => {
+        const partner = m.user1Id === userId ? m.user2 : m.user1;
+        const prof = partner.profile;
 
       // Compute age from dob
       let age = 21; // Default fallback
@@ -371,6 +376,7 @@ export class MatchService {
         photo: prof?.photos?.[0]?.secureUrl || '',
         photos: prof?.photos?.map((p: any) => p.secureUrl) || [],
         voiceIntroUrl: prof?.voiceIntroUrl || null,
+        matchedAt: m.createdAt,
         createdAt: m.createdAt,
       };
     });

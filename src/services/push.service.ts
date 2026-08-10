@@ -53,8 +53,16 @@ export class PushService {
     userId: string,
     payload: { title: string; body: string; icon?: string; url?: string; data?: any }
   ) {
-    const subscriptions = await prisma.pushSubscription.findMany({
+    const rawSubscriptions = await prisma.pushSubscription.findMany({
       where: { userId },
+    });
+
+    // Deduplicate by endpoint to prevent sending duplicate push notifications to the same device
+    const seenEndpoints = new Set<string>();
+    const subscriptions = rawSubscriptions.filter((sub) => {
+      if (!sub.endpoint || seenEndpoints.has(sub.endpoint)) return false;
+      seenEndpoints.add(sub.endpoint);
+      return true;
     });
 
     if (subscriptions.length === 0) {

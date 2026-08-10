@@ -7,6 +7,7 @@ import { io } from '../socket';
 
 const sendMessageSchema = z.object({
   text: z.string().optional(),
+  replyToId: z.string().optional().nullable(),
   attachments: z
     .array(
       z.object({
@@ -98,7 +99,8 @@ export class ChatController {
         conversationId,
         req.user.userId,
         result.data.text,
-        result.data.attachments
+        result.data.attachments,
+        result.data.replyToId || undefined
       );
 
       // Automatically clear typing status on send
@@ -114,6 +116,8 @@ export class ChatController {
           id: message.id,
           senderId: message.senderId,
           text: message.text,
+          replyToId: message.replyToId,
+          replyTo: message.replyTo,
           isDeleted: message.isDeleted,
           attachments: message.attachments,
           createdAt: message.createdAt,

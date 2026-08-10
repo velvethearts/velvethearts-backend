@@ -1,7 +1,7 @@
 import { ChatRepository } from '../repositories/chat.repository';
 import { NotificationRepository } from '../repositories/notification.repository';
 import { BlockRepository } from '../repositories/block.repository';
-import { io } from '../socket';
+import { io, isUserInConversationRoom } from '../socket';
 import { prisma } from '../config/database';
 
 import { PushService } from './push.service';
@@ -19,7 +19,8 @@ export class ChatService {
     return list
       .filter((c) => {
         const partnerParticipant = c.participants.find((p: any) => p.userId !== userId);
-        return partnerParticipant && !blockedUserIds.has(partnerParticipant.userId);
+        const partner = partnerParticipant?.user;
+        return partner && partner.status === 'ACTIVE' && partner.profile && !blockedUserIds.has(partnerParticipant.userId);
       })
       .map((c) => {
         const partnerParticipant = c.participants.find((p: any) => p.userId !== userId);
@@ -97,7 +98,7 @@ export class ChatService {
       });
   }
 
-  async sendMessage(targetConversationId: string, senderId: string, text?: string, attachments?: any[]) {
+  async sendMessage(targetConversationId: string, senderId: string, text?: string, attachments?: any[], replyToId?: string) {
     const conversation = await this.chatRepository.findConversationByTarget(senderId, targetConversationId);
     if (!conversation) throw new Error('Conversation not found');
 
@@ -114,7 +115,7 @@ export class ChatService {
       }
     }
 
-    const message = await this.chatRepository.createMessage(conversationId, senderId, text, attachments);
+    const message = await this.chatRepository.createMessage(conversationId, senderId, text, attachments, replyToId);
 
     if (partner) {
       try {
@@ -125,6 +126,8 @@ export class ChatService {
               id: message.id,
               senderId: message.senderId,
               text: message.text,
+              replyToId: message.replyToId,
+              replyTo: message.replyTo,
               isEdited: Boolean(message.isEdited),
               isDeleted: message.isDeleted,
               attachments: message.attachments,
@@ -136,22 +139,29 @@ export class ChatService {
           io.to(senderId).emit('new_message', socketMessagePayload);
         }
 
-        // Web Push notification to partner
-        const senderProfile = await prisma.profile.findUnique({
-          where: { userId: senderId },
-          select: { name: true }
-        });
-        const senderName = senderProfile?.name || 'Someone';
+        // Web Push notification to partner asynchronously (never blocking message send HTTP response)
+        const isPartnerInChatRoom = isUserInConversationRoom(conversationId, partner.userId);
+        if (!isPartnerInChatRoom) {
+          Promise.resolve().then(async () => {
+            try {
+              const senderProfile = await prisma.profile.findUnique({
+                where: { userId: senderId },
+                select: { name: true }
+              });
+              const senderName = senderProfile?.name || 'Someone';
 
-        const pushBody = text || (Array.isArray(attachments) && attachments.some((a: any) => a.fileType === 'AUDIO') ? '🎤 Sent a voice note' : 'Sent an attachment');
-        this.pushService.sendPushNotification(partner.userId, {
-          title: `New Message from ${senderName}`,
-          body: pushBody,
-          url: '/?tab=chat',
-          data: { tab: 'chat', conversationId, senderId }
-        }).catch(() => {});
+              const pushBody = text || (Array.isArray(attachments) && attachments.some((a: any) => a.fileType === 'AUDIO') ? '🎤 Sent a voice note' : 'Sent an attachment');
+              await this.pushService.sendPushNotification(partner.userId, {
+                title: `New Message from ${senderName}`,
+                body: pushBody,
+                url: '/?tab=chat',
+                data: { tab: 'chat', conversationId, senderId }
+              });
+            } catch (_) {}
+          });
+        }
       } catch (e) {
-        // Logging skipped here to avoid pulling logger dependency into this service
+        // Logging skipped
       }
     }
 

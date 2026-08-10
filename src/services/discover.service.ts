@@ -48,37 +48,42 @@ export class DiscoverService {
     const excludeIds = new Set<string>();
     excludeIds.add(userId);
 
-    // Exclude blocked users (both ways)
-    const blockedIds = await this.blockRepository.findBlockedUserIds(userId);
+    // Exclude blocked, liked, matched, and reported users in parallel
+    const [blockedIds, sentLikes, matches, reports] = await Promise.all([
+      this.blockRepository.findBlockedUserIds(userId),
+      this.likeRepository.findSentLikesByUser(userId),
+      prisma.match.findMany({
+        where: {
+          OR: [
+            { user1Id: userId },
+            { user2Id: userId },
+          ],
+          unmatched: false,
+        },
+        select: {
+          user1Id: true,
+          user2Id: true,
+        },
+      }),
+      prisma.report.findMany({
+        where: {
+          OR: [
+            { reporterId: userId },
+            { reportedId: userId }
+          ]
+        },
+        select: {
+          reporterId: true,
+          reportedId: true,
+        },
+      })
+    ]);
+
     blockedIds.forEach((id) => excludeIds.add(id));
-
-    // Exclude users already liked by this user
-    const sentLikes = await this.likeRepository.findSentLikesByUser(userId);
     sentLikes.forEach((like) => excludeIds.add(like.receiverId));
-
-    // Exclude users currently matched with this user (both active and unmatched)
-    const matches = await prisma.match.findMany({
-      where: {
-        OR: [
-          { user1Id: userId },
-          { user2Id: userId },
-        ],
-        unmatched: false,
-      },
-    });
     matches.forEach((m) => {
       excludeIds.add(m.user1Id);
       excludeIds.add(m.user2Id);
-    });
-
-    // Exclude reported users (both ways)
-    const reports = await prisma.report.findMany({
-      where: {
-        OR: [
-          { reporterId: userId },
-          { reportedId: userId }
-        ]
-      }
     });
     reports.forEach((r) => {
       excludeIds.add(r.reporterId);

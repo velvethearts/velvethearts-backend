@@ -111,6 +111,20 @@ export class ChatRepository {
           take: 25,
           include: {
             attachments: true,
+            replyTo: {
+              select: {
+                id: true,
+                senderId: true,
+                text: true,
+                isDeleted: true,
+                attachments: {
+                  select: {
+                    fileType: true,
+                    secureUrl: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -124,7 +138,8 @@ export class ChatRepository {
     conversationId: string,
     senderId: string,
     text?: string,
-    attachments?: { cloudinaryPublicId: string; secureUrl: string; fileType: FileType; fileName?: string; fileSize?: number }[]
+    attachments?: { cloudinaryPublicId: string; secureUrl: string; fileType: FileType; fileName?: string; fileSize?: number }[],
+    replyToId?: string
   ): Promise<any> {
     return prisma.$transaction(async (tx) => {
       const message = await tx.message.create({
@@ -132,6 +147,7 @@ export class ChatRepository {
           conversationId,
           senderId,
           text: text && text.trim() ? text.trim() : null,
+          replyToId: replyToId || null,
           attachments: attachments
             ? {
                 create: attachments.map((att) => ({
@@ -146,6 +162,20 @@ export class ChatRepository {
         },
         include: {
           attachments: true,
+          replyTo: {
+            select: {
+              id: true,
+              senderId: true,
+              text: true,
+              isDeleted: true,
+              attachments: {
+                select: {
+                  fileType: true,
+                  secureUrl: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -183,6 +213,20 @@ export class ChatRepository {
       include: {
         attachments: true,
         reactions: true,
+        replyTo: {
+          select: {
+            id: true,
+            senderId: true,
+            text: true,
+            isDeleted: true,
+            attachments: {
+              select: {
+                fileType: true,
+                secureUrl: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' }, // newest messages first for paginated messaging history
       take: limit,
