@@ -19,6 +19,7 @@ const saveProfileSchemaBase = z.object({
   showDisability: z.boolean().optional().default(false),
   photos: z.array(z.string()).min(1, 'Upload at least 1 photo'),
   voiceIntroUrl: z.string().optional().nullable(),
+  sparkNote: z.string().max(20, 'Spark note must be 20 characters or less').optional().nullable(),
   languages: z.array(z.string()).optional(),
   education: z.string().optional(),
   occupation: z.string().optional(),
@@ -27,8 +28,8 @@ const saveProfileSchemaBase = z.object({
 export const saveProfileSchema = saveProfileSchemaBase.refine((data) => {
   const { dobDay, dobMonth, dobYear } = data;
   const isLeapYear = (year: number) => (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
-  const maxDays = (dobMonth === 2) 
-    ? (isLeapYear(dobYear) ? 29 : 28) 
+  const maxDays = (dobMonth === 2)
+    ? (isLeapYear(dobYear) ? 29 : 28)
     : ([4, 6, 9, 11].includes(dobMonth) ? 30 : 31);
   return dobDay <= maxDays;
 }, {

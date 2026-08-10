@@ -24,6 +24,7 @@ export interface ProfileInput {
   showDisability?: boolean;
   photos: string[];
   voiceIntroUrl?: string | null;
+  sparkNote?: string | null;
   languages?: string[];
   education?: string;
   occupation?: string;
@@ -66,6 +67,8 @@ export class ProfileService {
       isPremium: profile.isPremium,
       photos: profile.photos.map((p) => p.secureUrl),
       voiceIntroUrl: profile.voiceIntroUrl || null,
+      sparkNote: profile.sparkNote || null,
+      sparkNoteUpdatedAt: profile.sparkNoteUpdatedAt || null,
       profileCompletion: calculateProfileCompletion(profile),
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
@@ -97,6 +100,8 @@ export class ProfileService {
           showDisability: data.showDisability ?? false,
           interests: data.interests,
           voiceIntroUrl: data.voiceIntroUrl !== undefined ? data.voiceIntroUrl : undefined,
+          sparkNote: data.sparkNote !== undefined ? data.sparkNote : undefined,
+          sparkNoteUpdatedAt: data.sparkNote !== undefined ? new Date() : undefined,
           languages: data.languages || [],
           education: data.education || null,
           occupation: data.occupation || null,
@@ -118,6 +123,8 @@ export class ProfileService {
           showDisability: data.showDisability ?? false,
           interests: data.interests,
           voiceIntroUrl: data.voiceIntroUrl || null,
+          sparkNote: data.sparkNote || null,
+          sparkNoteUpdatedAt: data.sparkNote ? new Date() : null,
           languages: data.languages || [],
           education: data.education || null,
           occupation: data.occupation || null,

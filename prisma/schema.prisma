@@ -72,6 +72,8 @@ model Profile {
   languages          String[]
   occupation         String?
   voiceIntroUrl      String?
+  sparkNote          String?
+  sparkNoteUpdatedAt DateTime?
   photos             Photo[]
   user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   promptAnswers      PromptAnswer[]

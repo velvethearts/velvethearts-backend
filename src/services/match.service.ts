@@ -376,6 +376,8 @@ export class MatchService {
         photo: prof?.photos?.[0]?.secureUrl || '',
         photos: prof?.photos?.map((p: any) => p.secureUrl) || [],
         voiceIntroUrl: prof?.voiceIntroUrl || null,
+        sparkNote: prof?.sparkNote || null,
+        sparkNoteUpdatedAt: prof?.sparkNoteUpdatedAt || null,
         matchedAt: m.createdAt,
         createdAt: m.createdAt,
       };
