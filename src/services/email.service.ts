@@ -45,7 +45,7 @@ export class EmailService {
     const displayName = name ? name.split(' ')[0] : 'there';
     const primaryUrl = (process.env.CORS_ORIGIN || '').split(',')[0].trim() || 'https://www.velvethearts.in';
     const configuredFrom = process.env.EMAIL_FROM || 'Velvet Hearts <hello@velvethearts.in>';
-    const logoUrl = `${primaryUrl}/velvet-heart-logo.png`;
+    const logoUrl = 'https://www.velvethearts.in/velvet-heart-logo.png';
 
     const htmlContent = `
       <!DOCTYPE html>
