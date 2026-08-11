@@ -4,6 +4,7 @@ import { EmailService } from './email.service';
 import { prisma } from '../config/database';
 import { firebaseAuth } from '../config/firebase';
 import { env } from '../config/env';
+import { logger } from '../utils/logger';
 import { ApprovalStatus, Role, User, UserStatus } from '@prisma/client';
 
 interface FirebaseUserInfo {
@@ -46,6 +47,21 @@ export class AuthService {
     };
   }
 
+  private async sendWelcomeEmailSafely(userId: string, email: string, name?: string): Promise<void> {
+    try {
+      const sent = await this.emailService.sendWelcomeEmail(email, name);
+      if (sent) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { welcomeEmailSent: true },
+        });
+        logger.info(`[AuthService] Welcome email successfully sent and recorded for user ${userId}`);
+      }
+    } catch (err: any) {
+      logger.error(`[AuthService] Error attempting welcome email for user ${userId}:`, err?.message || err);
+    }
+  }
+
   async authenticateFirebaseUser(
     firebaseIdToken: string,
     options: { phoneNumber?: string; ipAddress?: string; userAgent?: string } = {}
@@ -55,39 +71,43 @@ export class AuthService {
 
     let user = await this.userRepository.findByFirebaseUid(firebaseUser.uid);
 
-  if (user && user.status !== UserStatus.DELETED) {
-    const updates: { email?: string; phoneNumber?: string } = {};
+    if (user && user.status !== UserStatus.DELETED) {
+      const updates: { email?: string; phoneNumber?: string } = {};
 
-  if (firebaseUser.email && user.email !== firebaseUser.email) {
-    updates.email = firebaseUser.email;
-  }
+      if (firebaseUser.email && user.email !== firebaseUser.email) {
+        updates.email = firebaseUser.email;
+      }
 
-  if (phoneNumber && user.phoneNumber !== phoneNumber) {
-    updates.phoneNumber = phoneNumber;
-  }
+      if (phoneNumber && user.phoneNumber !== phoneNumber) {
+        updates.phoneNumber = phoneNumber;
+      }
 
-  if (Object.keys(updates).length > 0) {
-    user = await prisma.user.update({
-      where: { id: user.id },
-      data: updates,
-    });
-  }
+      if (Object.keys(updates).length > 0) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: updates,
+        });
+      }
 
-  await this.logRepository.create({
-    userId: user.id,
-    action: 'USER_LOGIN',
-    details: JSON.stringify({
-      firebaseUid: firebaseUser.uid,
-      email: user.email,
-      phoneNumber: user.phoneNumber,
-      provider: 'FIREBASE',
-    }),
-    ipAddress: options.ipAddress,
-    userAgent: options.userAgent,
-  });
+      await this.logRepository.create({
+        userId: user.id,
+        action: 'USER_LOGIN',
+        details: JSON.stringify({
+          firebaseUid: firebaseUser.uid,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          provider: 'FIREBASE',
+        }),
+        ipAddress: options.ipAddress,
+        userAgent: options.userAgent,
+      });
 
-  return user;
-}
+      if (user.email && !user.welcomeEmailSent) {
+        this.sendWelcomeEmailSafely(user.id, user.email, firebaseUser.name);
+      }
+
+      return user;
+    }
 
     // Either no user exists for this Firebase identity yet, or the only
     // matching row was soft-deleted — either way we need a fresh account.
@@ -126,6 +146,7 @@ export class AuthService {
           previousUserId: lastDeleted ? lastDeleted.id : null,
           phoneVerified: !!firebaseUser.phoneNumber,
           phoneVerifiedAt: firebaseUser.phoneNumber ? new Date() : null,
+          welcomeEmailSent: false,
         },
       });
 
@@ -155,10 +176,8 @@ export class AuthService {
       userAgent: options.userAgent,
     });
 
-    if (user.email) {
-      this.emailService.sendWelcomeEmail(user.email, firebaseUser.name).catch((err) => {
-        console.error('[AuthService] Error invoking sendWelcomeEmail:', err);
-      });
+    if (user.email && !user.welcomeEmailSent) {
+      this.sendWelcomeEmailSafely(user.id, user.email, firebaseUser.name);
     }
 
     return user;

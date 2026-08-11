@@ -1,9 +1,17 @@
+import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
+import { env } from '../config/env';
 
 export class EmailService {
+  private resend: Resend | null = null;
   private transporter: nodemailer.Transporter | null = null;
 
   constructor() {
+    const resendKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
+    if (resendKey && resendKey.trim()) {
+      this.resend = new Resend(resendKey.trim());
+    }
+
     const host = process.env.SMTP_HOST;
     const port = Number(process.env.SMTP_PORT) || 587;
     const user = process.env.SMTP_USER;
@@ -16,19 +24,24 @@ export class EmailService {
         secure: port === 465,
         auth: { user, pass },
       });
-    } else {
-      console.warn('⚠️ EmailService: SMTP credentials not fully configured in environment variables. Email sending is disabled.');
+    }
+
+    if (!this.resend && !this.transporter) {
+      console.warn('⚠️ EmailService: Neither RESEND_API_KEY nor SMTP credentials configured. Email sending is disabled.');
     }
   }
 
   async sendWelcomeEmail(toEmail: string, name?: string): Promise<boolean> {
-    if (!this.transporter) {
-      console.log(`[EmailService] Skipping welcome email to ${toEmail} (SMTP credentials not configured)`);
+    if (!this.resend && !this.transporter) {
+      console.log(`[EmailService] Skipping welcome email to ${toEmail} (No Resend API Key or SMTP configured)`);
       return false;
     }
 
     const displayName = name ? name.split(' ')[0] : 'there';
-    const fromAddress = process.env.EMAIL_FROM || '"Velvet Hearts" <no-reply@velvethearts.com>';
+    const primaryUrl = (process.env.CORS_ORIGIN || '').split(',')[0].trim() || 'https://www.velvethearts.in';
+    const fromAddress = process.env.EMAIL_FROM || 'Velvet Hearts <hello@velvethearts.in>';
+
+    const logoUrl = `${primaryUrl}/velvet-heart-logo.png`;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -45,10 +58,19 @@ export class EmailService {
               <table role="presentation" width="100%" style="max-width: 600px; background-color: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
                 <!-- Header -->
                 <tr>
-                  <td style="padding: 32px; text-align: center; background: linear-gradient(135deg, #1e1b4b 0%, #31103f 10 supply, #0f172a 100%);">
-                    <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ec4899; letter-spacing: 0.5px;">
-                      Velvet Hearts 💕
-                    </h1>
+                  <td style="padding: 28px 32px; text-align: center; background: linear-gradient(135deg, #1e1b4b 0%, #31103f 50%, #0f172a 100%);">
+                    <table role="presentation" align="center" cellspacing="0" cellpadding="0" style="margin: 0 auto;">
+                      <tr>
+                        <td style="vertical-align: middle; padding-right: 12px;">
+                          <img src="${logoUrl}" alt="Velvet Hearts Logo" width="38" height="38" style="width: 38px; height: 38px; border-radius: 50%; display: block; border: 0;" />
+                        </td>
+                        <td style="vertical-align: middle;">
+                          <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ec4899; letter-spacing: 0.5px; line-height: 1;">
+                            Velvet Hearts
+                          </h1>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
                 <!-- Body -->
@@ -58,7 +80,7 @@ export class EmailService {
                       Welcome, ${displayName}!
                     </h2>
                     <p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.6; color: #cbd5e1;">
-                      Thank you for joining Velvet Hearts! We’re excited to have you as part of our exclusive community where authentic relationships and meaningful connections begin.
+                      Your Velvet Hearts account has been successfully created! We’re excited to have you as part of our exclusive community where authentic relationships and meaningful connections begin.
                     </p>
                     <p style="margin: 0 0 24px 0; font-size: 15px; line-height: 1.6; color: #cbd5e1;">
                       To get the best experience and find your ideal match, take a minute to complete your profile, share your story, and upload your favorite photos.
@@ -67,12 +89,16 @@ export class EmailService {
                     <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 28px auto;">
                       <tr>
                         <td align="center" style="border-radius: 25px; background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);">
-                          <a href="${process.env.CORS_ORIGIN || 'https://velvethearts.com'}" target="_blank" style="display: inline-block; padding: 14px 32px; font-size: 15px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 25px;">
+                          <a href="${primaryUrl}" target="_blank" style="display: inline-block; padding: 14px 32px; font-size: 15px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 25px;">
                             Complete Your Profile
                           </a>
                         </td>
                       </tr>
                     </table>
+                    <p style="margin: 24px 0 0 0; font-size: 15px; line-height: 1.6; color: #cbd5e1;">
+                      Warmly,<br>
+                      <strong>The Velvet Hearts Team ❤️</strong>
+                    </p>
                   </td>
                 </tr>
                 <!-- Footer -->
@@ -92,18 +118,46 @@ export class EmailService {
       </html>
     `;
 
-    try {
-      await this.transporter.sendMail({
-        from: fromAddress,
-        to: toEmail,
-        subject: 'Welcome to Velvet Hearts! ❤️',
-        html: htmlContent,
-      });
-      console.log(`[EmailService] Welcome email successfully sent to ${toEmail}`);
-      return true;
-    } catch (error) {
-      console.error(`[EmailService] Failed to send welcome email to ${toEmail}:`, error);
-      return false;
+    // 1. Primary: Use Resend API if configured
+    if (this.resend) {
+      try {
+        const data = await this.resend.emails.send({
+          from: fromAddress,
+          to: [toEmail],
+          subject: 'Welcome to Velvet Hearts ❤️',
+          html: htmlContent,
+        });
+
+        if (data.error) {
+          console.error(`[EmailService] Resend API error sending welcome email to ${toEmail}:`, data.error);
+          return false;
+        }
+
+        console.log(`[EmailService] Welcome email successfully sent via Resend to ${toEmail} (ID: ${data.data?.id})`);
+        return true;
+      } catch (error) {
+        console.error(`[EmailService] Failed sending welcome email via Resend to ${toEmail}:`, error);
+        return false;
+      }
     }
+
+    // 2. Fallback: Use Nodemailer SMTP
+    if (this.transporter) {
+      try {
+        await this.transporter.sendMail({
+          from: fromAddress,
+          to: toEmail,
+          subject: 'Welcome to Velvet Hearts ❤️',
+          html: htmlContent,
+        });
+        console.log(`[EmailService] Welcome email successfully sent via SMTP to ${toEmail}`);
+        return true;
+      } catch (error) {
+        console.error(`[EmailService] Failed sending welcome email via SMTP to ${toEmail}:`, error);
+        return false;
+      }
+    }
+
+    return false;
   }
 }
