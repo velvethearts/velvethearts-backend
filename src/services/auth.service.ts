@@ -102,9 +102,11 @@ export class AuthService {
         userAgent: options.userAgent,
       });
 
-      if (user.email && !user.welcomeEmailSent) {
-        const isReturning = Boolean(user.previousUserId);
-        this.sendWelcomeEmailSafely(user.id, user.email, firebaseUser.name, isReturning);
+      if (!user.welcomeEmailSent) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { welcomeEmailSent: true },
+        });
       }
 
       return user;
