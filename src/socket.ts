@@ -43,7 +43,7 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
       if (!token) {
         return next(new Error('Authentication token required'));
       }
-      
+
       let user: any = null;
 
       if (token.startsWith('dev-google:')) {
