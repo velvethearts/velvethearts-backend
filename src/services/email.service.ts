@@ -32,15 +32,19 @@ export class EmailService {
   }
 
   async sendWelcomeEmail(toEmail: string, name?: string): Promise<boolean> {
+    const resendKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
+    if (!this.resend && resendKey && resendKey.trim()) {
+      this.resend = new Resend(resendKey.trim());
+    }
+
     if (!this.resend && !this.transporter) {
-      console.log(`[EmailService] Skipping welcome email to ${toEmail} (No Resend API Key or SMTP configured)`);
+      console.warn(`[EmailService] Skipping welcome email to ${toEmail} (No RESEND_API_KEY or SMTP configured)`);
       return false;
     }
 
     const displayName = name ? name.split(' ')[0] : 'there';
     const primaryUrl = (process.env.CORS_ORIGIN || '').split(',')[0].trim() || 'https://www.velvethearts.in';
-    const fromAddress = process.env.EMAIL_FROM || 'Velvet Hearts <hello@velvethearts.in>';
-
+    const configuredFrom = process.env.EMAIL_FROM || 'Velvet Hearts <hello@velvethearts.in>';
     const logoUrl = `${primaryUrl}/velvet-heart-logo.png`;
 
     const htmlContent = `
@@ -121,19 +125,30 @@ export class EmailService {
     // 1. Primary: Use Resend API if configured
     if (this.resend) {
       try {
-        const data = await this.resend.emails.send({
-          from: fromAddress,
+        let resendResponse = await this.resend.emails.send({
+          from: configuredFrom,
           to: [toEmail],
           subject: 'Welcome to Velvet Hearts ❤️',
           html: htmlContent,
         });
 
-        if (data.error) {
-          console.error(`[EmailService] Resend API error sending welcome email to ${toEmail}:`, data.error);
+        // Fallback to onboarding@resend.dev if custom domain is unverified on Resend
+        if (resendResponse.error && (resendResponse.error.message?.includes('not verified') || resendResponse.error.statusCode === 403)) {
+          console.warn(`[EmailService] Custom domain unverified on Resend. Retrying with onboarding@resend.dev...`);
+          resendResponse = await this.resend.emails.send({
+            from: 'Velvet Hearts <onboarding@resend.dev>',
+            to: [toEmail],
+            subject: 'Welcome to Velvet Hearts ❤️',
+            html: htmlContent,
+          });
+        }
+
+        if (resendResponse.error) {
+          console.error(`[EmailService] Resend API error sending welcome email to ${toEmail}:`, resendResponse.error);
           return false;
         }
 
-        console.log(`[EmailService] Welcome email successfully sent via Resend to ${toEmail} (ID: ${data.data?.id})`);
+        console.log(`[EmailService] Welcome email successfully sent via Resend to ${toEmail} (ID: ${resendResponse.data?.id})`);
         return true;
       } catch (error) {
         console.error(`[EmailService] Failed sending welcome email via Resend to ${toEmail}:`, error);
@@ -145,7 +160,7 @@ export class EmailService {
     if (this.transporter) {
       try {
         await this.transporter.sendMail({
-          from: fromAddress,
+          from: configuredFrom,
           to: toEmail,
           subject: 'Welcome to Velvet Hearts ❤️',
           html: htmlContent,

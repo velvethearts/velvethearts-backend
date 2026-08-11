@@ -156,6 +156,24 @@ export class ProfileService {
       details: JSON.stringify({ name: data.name }),
     });
 
+    // Check if user has pending welcome email
+    try {
+      const user = await this.userRepository.findById(userId);
+      if (user && user.email && !user.welcomeEmailSent) {
+        const { EmailService } = await import('./email.service');
+        const emailService = new EmailService();
+        const sent = await emailService.sendWelcomeEmail(user.email, data.name);
+        if (sent) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { welcomeEmailSent: true },
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error('[ProfileService] Failed checking/sending welcome email after saveProfile:', err);
+    }
+
     return this.getProfile(userId);
   }
 
