@@ -162,7 +162,8 @@ export class ProfileService {
       if (user && user.email && !user.welcomeEmailSent) {
         const { EmailService } = await import('./email.service');
         const emailService = new EmailService();
-        const sent = await emailService.sendWelcomeEmail(user.email, data.name);
+        const isReturning = Boolean(user.previousUserId);
+        const sent = await emailService.sendWelcomeEmail(user.email, data.name, isReturning);
         if (sent) {
           await prisma.user.update({
             where: { id: userId },

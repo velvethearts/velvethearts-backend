@@ -31,7 +31,7 @@ export class EmailService {
     }
   }
 
-  async sendWelcomeEmail(toEmail: string, name?: string): Promise<boolean> {
+  async sendWelcomeEmail(toEmail: string, name?: string, isReturningUser: boolean = false): Promise<boolean> {
     const resendKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
     if (!this.resend && resendKey && resendKey.trim()) {
       this.resend = new Resend(resendKey.trim());
@@ -47,13 +47,23 @@ export class EmailService {
     const configuredFrom = process.env.EMAIL_FROM || 'Velvet Hearts <hello@velvethearts.in>';
     const logoUrl = 'https://www.velvethearts.in/velvet-heart-logo.png';
 
+    const subject = isReturningUser ? 'Welcome back to Velvet Hearts! ❤️' : 'Welcome to Velvet Hearts ❤️';
+    const heading = isReturningUser ? `Welcome back, ${displayName}!` : `Welcome, ${displayName}!`;
+    const messageP1 = isReturningUser
+      ? `We noticed you're back for a fresh start on Velvet Hearts! We’re thrilled to have you back in our community where authentic relationships and meaningful connections begin.`
+      : `Your Velvet Hearts account has been successfully created! We’re excited to have you as part of our exclusive community where authentic relationships and meaningful connections begin.`;
+    const messageP2 = isReturningUser
+      ? `To get the best experience and find your ideal match, take a minute to complete your fresh profile, share your story, and upload your favorite photos.`
+      : `To get the best experience and find your ideal match, take a minute to complete your profile, share your story, and upload your favorite photos.`;
+    const buttonText = isReturningUser ? 'Complete Your Fresh Profile' : 'Complete Your Profile';
+
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Welcome to Velvet Hearts</title>
+        <title>${subject}</title>
       </head>
       <body style="margin: 0; padding: 0; background-color: #0b0f17; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #f8fafc;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0b0f17; padding: 40px 10px;">
@@ -62,14 +72,14 @@ export class EmailService {
               <table role="presentation" width="100%" style="max-width: 600px; background-color: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
                 <!-- Header -->
                 <tr>
-                  <td style="padding: 28px 32px; text-align: center; background: linear-gradient(135deg, #1e1b4b 0%, #31103f 50%, #0f172a 100%);">
+                  <td style="padding: 34px 32px; text-align: center; background: linear-gradient(135deg, #1e1b4b 0%, #31103f 50%, #0f172a 100%);">
                     <table role="presentation" align="center" cellspacing="0" cellpadding="0" style="margin: 0 auto;">
                       <tr>
-                        <td style="vertical-align: middle; padding-right: 12px;">
-                          <img src="${logoUrl}" alt="Velvet Hearts Logo" width="38" height="38" style="width: 38px; height: 38px; border-radius: 50%; display: block; border: 0;" />
+                        <td style="vertical-align: middle; padding-right: 16px;">
+                          <img src="${logoUrl}" alt="Velvet Hearts Logo" width="50" height="50" style="width: 50px; height: 50px; border-radius: 50%; display: block; border: 0;" />
                         </td>
                         <td style="vertical-align: middle;">
-                          <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ec4899; letter-spacing: 0.5px; line-height: 1;">
+                          <h1 style="margin: 0; font-size: 30px; font-weight: 800; color: #ec4899; letter-spacing: 0.5px; line-height: 1;">
                             Velvet Hearts
                           </h1>
                         </td>
@@ -81,20 +91,20 @@ export class EmailService {
                 <tr>
                   <td style="padding: 32px 32px 24px 32px;">
                     <h2 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 700; color: #ffffff;">
-                      Welcome, ${displayName}!
+                      ${heading}
                     </h2>
                     <p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.6; color: #cbd5e1;">
-                      Your Velvet Hearts account has been successfully created! We’re excited to have you as part of our exclusive community where authentic relationships and meaningful connections begin.
+                      ${messageP1}
                     </p>
                     <p style="margin: 0 0 24px 0; font-size: 15px; line-height: 1.6; color: #cbd5e1;">
-                      To get the best experience and find your ideal match, take a minute to complete your profile, share your story, and upload your favorite photos.
+                      ${messageP2}
                     </p>
                     <!-- Button -->
                     <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 28px auto;">
                       <tr>
                         <td align="center" style="border-radius: 25px; background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);">
                           <a href="${primaryUrl}" target="_blank" style="display: inline-block; padding: 14px 32px; font-size: 15px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 25px;">
-                            Complete Your Profile
+                            ${buttonText}
                           </a>
                         </td>
                       </tr>
@@ -128,7 +138,7 @@ export class EmailService {
         let resendResponse = await this.resend.emails.send({
           from: configuredFrom,
           to: [toEmail],
-          subject: 'Welcome to Velvet Hearts ❤️',
+          subject,
           html: htmlContent,
         });
 
@@ -138,7 +148,7 @@ export class EmailService {
           resendResponse = await this.resend.emails.send({
             from: 'Velvet Hearts <onboarding@resend.dev>',
             to: [toEmail],
-            subject: 'Welcome to Velvet Hearts ❤️',
+            subject,
             html: htmlContent,
           });
         }

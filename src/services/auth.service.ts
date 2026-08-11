@@ -47,18 +47,18 @@ export class AuthService {
     };
   }
 
-  private async sendWelcomeEmailSafely(userId: string, email: string, name?: string): Promise<void> {
+  private async sendWelcomeEmailSafely(userId: string, email: string, name?: string, isReturningUser: boolean = false): Promise<void> {
     try {
-      const sent = await this.emailService.sendWelcomeEmail(email, name);
+      const sent = await this.emailService.sendWelcomeEmail(email, name, isReturningUser);
       if (sent) {
         await prisma.user.update({
           where: { id: userId },
           data: { welcomeEmailSent: true },
         });
-        logger.info(`[AuthService] Welcome email successfully sent and recorded for user ${userId}`);
+        logger.info(`[AuthService] ${isReturningUser ? 'Welcome back' : 'Welcome'} email successfully sent and recorded for user ${userId}`);
       }
     } catch (err: any) {
-      logger.error(`[AuthService] Error attempting welcome email for user ${userId}:`, err?.message || err);
+      logger.error(`[AuthService] Error attempting ${isReturningUser ? 'welcome back' : 'welcome'} email for user ${userId}:`, err?.message || err);
     }
   }
 
@@ -103,7 +103,8 @@ export class AuthService {
       });
 
       if (user.email && !user.welcomeEmailSent) {
-        this.sendWelcomeEmailSafely(user.id, user.email, firebaseUser.name);
+        const isReturning = Boolean(user.previousUserId);
+        this.sendWelcomeEmailSafely(user.id, user.email, firebaseUser.name, isReturning);
       }
 
       return user;
@@ -117,13 +118,18 @@ export class AuthService {
       deletedUserForFirebaseUid ??
       (await prisma.user.findFirst({
         where: {
-          phoneNumber: phoneNumber || '',
+          OR: [
+            { phoneNumber: phoneNumber || undefined },
+            { email: firebaseUser.email || undefined },
+          ],
           status: UserStatus.DELETED,
         },
         orderBy: {
           createdAt: 'desc',
         },
       }));
+
+    const isReturningUser = Boolean(deletedUserForFirebaseUid || lastDeleted);
 
     user = await prisma.$transaction(async (tx) => {
       // The old deleted row may still hold this firebaseUid (it's a unique
@@ -177,7 +183,7 @@ export class AuthService {
     });
 
     if (user.email && !user.welcomeEmailSent) {
-      this.sendWelcomeEmailSafely(user.id, user.email, firebaseUser.name);
+      this.sendWelcomeEmailSafely(user.id, user.email, firebaseUser.name, isReturningUser);
     }
 
     return user;
