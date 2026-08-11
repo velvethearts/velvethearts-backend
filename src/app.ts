@@ -100,12 +100,12 @@ export default app;
 const URL = process.env.URL!
 
 async function ping() {
-    try {
-        const res = await fetch(URL);
-        console.log(`[${new Date().toLocaleDateString()}] ${res.status}`);
-    } catch (error: any) {
-        console.error(error.message);
-    }
+  try {
+    const res = await fetch(URL);
+    console.log(`[${new Date().toLocaleDateString()}] ${res.status}`);
+  } catch (error: any) {
+    console.error(error.message);
+  }
 }
 
 setInterval(ping, 1 * 60 * 1000); // Ping every 1 minute
