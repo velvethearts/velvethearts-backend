@@ -62,7 +62,7 @@ export class UploadService {
             }, null, 2));
 
             // Check moderation status if returned
-            const moderationStatus = result.moderation?.[0]?.status;
+            const moderationStatus = (result.moderation as any)?.[0]?.status;
             if (moderationStatus === 'rejected') {
               logger.warn(`Cloudinary moderation REJECTED upload: ${result.public_id}`);
               reject(new Error('Upload rejected: Image contains inappropriate or explicit content'));
