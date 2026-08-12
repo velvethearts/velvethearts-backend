@@ -39,6 +39,8 @@ export class UploadService {
         // Photos: restrict to safe image formats only — blocks SVG/SWF/HTML
         uploadOptions.resource_type = 'image';
         uploadOptions.allowed_formats = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+        // [AI Moderation] Automated explicit content & nudity scanning via Amazon Rekognition
+        uploadOptions.moderation = 'aws_rek:explicit';
       }
 
       const uploadStream = cloudinary.uploader.upload_stream(
