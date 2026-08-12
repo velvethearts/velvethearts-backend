@@ -39,8 +39,6 @@ export class UploadService {
         // Photos: restrict to safe image formats only — blocks SVG/SWF/HTML
         uploadOptions.resource_type = 'image';
         uploadOptions.allowed_formats = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-        // [Moderation] Send image to Cloudinary Moderation Queue (uses the 500 Moderation Actions quota)
-        uploadOptions.moderation = 'manual';
       }
 
       const uploadStream = cloudinary.uploader.upload_stream(
@@ -55,6 +53,12 @@ export class UploadService {
               reject(new Error('Cloudinary media upload failed'));
             }
           } else if (result) {
+            logger.info('[Cloudinary Upload Result]', JSON.stringify({
+              public_id: result.public_id,
+              secure_url: result.secure_url,
+              moderation: result.moderation,
+            }, null, 2));
+
             // Check moderation status if returned
             const moderationStatus = result.moderation?.[0]?.status;
             if (moderationStatus === 'rejected') {
