@@ -39,6 +39,8 @@ export class UploadService {
         // Photos: restrict to safe image formats only — blocks SVG/SWF/HTML
         uploadOptions.resource_type = 'image';
         uploadOptions.allowed_formats = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+        // [AI Moderation] Automated explicit content & nudity scanning via AWS Rekognition
+        uploadOptions.moderation = 'aws_rek:explicit';
       }
 
       const uploadStream = cloudinary.uploader.upload_stream(
@@ -46,8 +48,21 @@ export class UploadService {
         (error, result) => {
           if (error) {
             logger.error('Cloudinary upload failure:', error);
-            reject(new Error('Cloudinary media upload failed'));
+            // Handle moderation rejection explicitly
+            if (error?.message?.includes('moderation') || error?.message?.includes('rejected')) {
+              reject(new Error('Upload rejected: Image contains inappropriate or explicit content'));
+            } else {
+              reject(new Error('Cloudinary media upload failed'));
+            }
           } else if (result) {
+            // Check moderation status if returned
+            const moderationStatus = result.moderation?.[0]?.status;
+            if (moderationStatus === 'rejected') {
+              logger.warn(`Cloudinary moderation REJECTED upload: ${result.public_id}`);
+              reject(new Error('Upload rejected: Image contains inappropriate or explicit content'));
+              return;
+            }
+
             resolve({
               secureUrl: result.secure_url,
               publicId: result.public_id,
