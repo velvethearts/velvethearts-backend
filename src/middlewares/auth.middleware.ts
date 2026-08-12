@@ -47,7 +47,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
       try {
         decoded = await firebaseAuth().verifyIdToken(token);
       } catch (err: any) {
-        logger.warn('Firebase token verification failed:', err.message);
+        logger.warn(`Firebase token verification failed: ${err?.message || err}`);
         return res.status(401).json({ success: false, message: 'Invalid or expired access token' });
       }
 
