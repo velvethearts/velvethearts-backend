@@ -22,6 +22,7 @@ import {
   chatRateLimiter, 
   reportRateLimiter, 
   searchDiscoverRateLimiter,
+  uploadRateLimiter,
 } from '../middlewares/rate-limiter.middleware';
 
 const router = Router();
@@ -67,7 +68,7 @@ router.get('/search', requireAuth,  searchDiscoverRateLimiter, searchCtrl.search
 // MATCH ROUTES
 // ==========================================
 router.post('/match/like', requireAuth,  likeRateLimiter, matchCtrl.like);
-router.post('/match/unlike', requireAuth,  matchCtrl.unlike);
+router.post('/match/unlike', requireAuth, likeRateLimiter, matchCtrl.unlike);
 router.post('/match/unmatch', requireAuth,  matchCtrl.unmatch);
 router.get('/match/connections', requireAuth,  matchCtrl.getConnections);
 router.get('/match/received-invites', requireAuth, matchCtrl.getReceivedInvites);
@@ -99,7 +100,7 @@ router.get('/chat/conversations/:conversationId/typing', requireAuth, chatCtrl.g
 // ==========================================
 // UPLOAD ROUTE
 // ==========================================
-router.post('/upload', requireAuth, upload.any(), uploadCtrl.uploadPhoto);
+router.post('/upload', requireAuth, uploadRateLimiter, upload.any(), uploadCtrl.uploadPhoto);
 
 // ==========================================
 // NOTIFICATION & PUSH ROUTES

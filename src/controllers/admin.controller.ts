@@ -22,6 +22,17 @@ const getUsersSchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(20),
 });
 
+// [H-8 FIX] Zod schema for audit log pagination with enforced max limit
+const auditLogQuerySchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(200).default(50),
+});
+
+// [H-9 FIX] Zod schema for report status filter
+const reportStatusSchema = z.object({
+  status: z.nativeEnum(ReportStatus).optional(),
+});
+
 export class AdminController {
   private adminService = new AdminService();
 
@@ -122,16 +133,19 @@ export class AdminController {
 
   getReports = async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { status } = req.query;
-      const reportStatus = status ? (status as ReportStatus) : undefined;
-      const reports = await this.adminService.getReports(reportStatus);
+      // [H-9 FIX] Validate status parameter with Zod enum
+      const parsed = reportStatusSchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: 'Invalid report status filter' });
+      }
+      const reports = await this.adminService.getReports(parsed.data.status);
       return res.status(200).json({
         success: true,
         data: reports,
       });
     } catch (error: any) {
       logger.error('getReports controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Retrieving reports failed' });
+      return res.status(500).json({ success: false, message: 'Retrieving reports failed' });
     }
   };
 
@@ -272,11 +286,13 @@ export class AdminController {
 
   getAuditLogs = async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { page, limit } = req.query;
-      const pageNum = page ? parseInt(String(page), 10) : 1;
-      const limitNum = limit ? parseInt(String(limit), 10) : 50;
+      // [H-8 FIX] Validate and cap pagination parameters
+      const parsed = auditLogQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: 'Invalid pagination parameters' });
+      }
 
-      const data = await this.adminService.getAuditLogs(pageNum, limitNum);
+      const data = await this.adminService.getAuditLogs(parsed.data.page, parsed.data.limit);
 
       return res.status(200).json({
         success: true,
@@ -285,7 +301,7 @@ export class AdminController {
       });
     } catch (error: any) {
       logger.error('getAuditLogs controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Retrieving audit logs failed' });
+      return res.status(500).json({ success: false, message: 'Retrieving audit logs failed' });
     }
   };
 }

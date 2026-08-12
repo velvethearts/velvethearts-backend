@@ -49,7 +49,7 @@ export class SearchController {
       });
     } catch (error: any) {
       logger.error('Search controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Profile search failed' });
+      return res.status(500).json({ success: false, message: 'Profile search failed' });
     }
   };
 }

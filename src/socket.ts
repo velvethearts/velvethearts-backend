@@ -27,10 +27,42 @@ export function isUserInConversationRoom(conversationId: string, userId: string)
   return false;
 }
 
-export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
+// ============================================================
+// [C-2 FIX] Per-socket event rate limiter (token-bucket)
+// ============================================================
+const eventBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function checkEventRate(socketId: string, event: string, maxPerMinute: number): boolean {
+  const key = `${socketId}:${event}`;
+  const now = Date.now();
+  const entry = eventBuckets.get(key);
+  if (!entry || now > entry.resetAt) {
+    eventBuckets.set(key, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (entry.count >= maxPerMinute) return false;
+  entry.count++;
+  return true;
+}
+
+function cleanupSocketBuckets(socketId: string) {
+  for (const key of eventBuckets.keys()) {
+    if (key.startsWith(`${socketId}:`)) {
+      eventBuckets.delete(key);
+    }
+  }
+}
+
+// [M-4 FIX] Accept string | string[] for CORS origin
+export function initSocketServer(httpServer: HttpServer, corsOrigin: string | string[]) {
+  // Parse comma-separated origin string into an array for proper multi-origin matching
+  const parsedOrigin = typeof corsOrigin === 'string'
+    ? corsOrigin.split(',').map(s => s.trim()).filter(Boolean)
+    : corsOrigin;
+
   io = new SocketServer(httpServer, {
     cors: {
-      origin: corsOrigin,
+      origin: parsedOrigin,
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -102,11 +134,31 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
 
     logger.info(`Socket client connected: ${userId} (${socket.id})`);
 
-    // Join a specific conversation room
-    socket.on('join_conversation', (conversationId: string) => {
-      if (conversationId) {
+    // ============================================================
+    // [C-1 FIX] Verify conversation membership before joining room
+    // ============================================================
+    socket.on('join_conversation', async (conversationId: string) => {
+      if (!conversationId) return;
+
+      // Rate limit join attempts
+      if (!checkEventRate(socket.id, 'join_conversation', 30)) return;
+
+      try {
+        const conv = await prisma.conversation.findUnique({
+          where: { id: conversationId },
+          include: { participants: true },
+        });
+
+        const isMember = conv?.participants.some(p => p.userId === userId);
+        if (!isMember) {
+          logger.warn(`Socket: User ${userId} attempted to join unauthorized conversation ${conversationId}`);
+          return;
+        }
+
         socket.join(conversationId);
         logger.debug(`Socket user ${userId} joined room: ${conversationId}`);
+      } catch (err: any) {
+        logger.error('Socket join_conversation error:', err?.message || err);
       }
     });
 
@@ -118,54 +170,84 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string) {
       }
     });
 
-    // Handle typing start
+    // [C-2 FIX] Handle typing start — rate limited
     socket.on('typing_start', (conversationId: string) => {
-      if (conversationId) {
-        socket.to(conversationId).emit('typing', {
-          conversationId,
-          userId,
-          isTyping: true,
-        });
-      }
+      if (!conversationId) return;
+      if (!checkEventRate(socket.id, 'typing_start', 120)) return;
+
+      socket.to(conversationId).emit('typing', {
+        conversationId,
+        userId,
+        isTyping: true,
+      });
     });
 
-    // Handle typing stop
+    // [C-2 FIX] Handle typing stop — rate limited
     socket.on('typing_stop', (conversationId: string) => {
-      if (conversationId) {
-        socket.to(conversationId).emit('typing', {
-          conversationId,
-          userId,
-          isTyping: false,
-        });
-      }
+      if (!conversationId) return;
+      if (!checkEventRate(socket.id, 'typing_stop', 120)) return;
+
+      socket.to(conversationId).emit('typing', {
+        conversationId,
+        userId,
+        isTyping: false,
+      });
     });
 
-    // Handle mark seen
+    // [C-2 FIX] Handle mark seen — rate limited
     socket.on('mark_seen', async (conversationId: string) => {
-      if (conversationId && userId) {
-        try {
-          const { ChatService } = await import('./services/chat.service');
-          const chatService = new ChatService();
-          await chatService.markSeen(conversationId, userId);
-        } catch (e: any) {
-          logger.error('Socket mark_seen error:', e?.message || e);
-        }
+      if (!conversationId || !userId) return;
+      if (!checkEventRate(socket.id, 'mark_seen', 60)) return;
+
+      try {
+        const { ChatService } = await import('./services/chat.service');
+        const chatService = new ChatService();
+        await chatService.markSeen(conversationId, userId);
+      } catch (e: any) {
+        logger.error('Socket mark_seen error:', e?.message || e);
       }
     });
 
-    // Handle Nudge Spark
+    // ============================================================
+    // [C-3 FIX] Verify active match before allowing nudge_spark
+    // [C-2 FIX] Rate limited
+    // ============================================================
     socket.on('nudge_spark', async ({ targetUserId, senderName }: { targetUserId: string; senderName?: string }) => {
-      if (targetUserId) {
+      if (!targetUserId) return;
+      if (!checkEventRate(socket.id, 'nudge_spark', 10)) return;
+
+      try {
+        // Verify an active match exists between the sender and target
+        const match = await prisma.match.findFirst({
+          where: {
+            unmatched: false,
+            OR: [
+              { user1Id: userId, user2Id: targetUserId },
+              { user1Id: targetUserId, user2Id: userId },
+            ],
+          },
+        });
+
+        if (!match) {
+          logger.warn(`Socket: User ${userId} attempted nudge_spark to non-matched user ${targetUserId}`);
+          return;
+        }
+
         io.to(targetUserId).emit('spark_nudged', {
           senderId: userId,
           senderName: senderName || 'Someone',
           message: `${senderName || 'Someone'} nudged your spark! Say hi 👋`,
           timestamp: new Date().toISOString()
         });
+      } catch (err: any) {
+        logger.error('Socket nudge_spark error:', err?.message || err);
       }
     });
 
     socket.on('disconnect', () => {
+      // Clean up rate limit buckets for this socket
+      cleanupSocketBuckets(socket.id);
+
       const count = userSocketCounts.get(userId) || 1;
       if (count <= 1) {
         userSocketCounts.delete(userId);

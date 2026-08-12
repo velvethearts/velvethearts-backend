@@ -42,7 +42,8 @@ export class PushController {
     try {
       const { endpoint } = req.body;
       if (endpoint) {
-        await this.pushService.unsubscribe(endpoint);
+        // [M-8 FIX] Scope deletion to the authenticated user's own subscriptions
+        await this.pushService.unsubscribe(endpoint, req.user?.userId);
       }
 
       return res.status(200).json({
@@ -51,7 +52,7 @@ export class PushController {
       });
     } catch (error: any) {
       logger.error('unsubscribe controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Failed to unsubscribe' });
+      return res.status(500).json({ success: false, message: 'Failed to unsubscribe' });
     }
   };
 }

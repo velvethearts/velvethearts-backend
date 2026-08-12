@@ -3,7 +3,8 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  const result = await prisma.$executeRawUnsafe(`DELETE FROM "Like" WHERE "senderId" = "receiverId";`);
+  // [L-1 FIX] Use safe tagged template $executeRaw instead of $executeRawUnsafe
+  const result = await prisma.$executeRaw`DELETE FROM "Like" WHERE "senderId" = "receiverId";`;
   console.log('Successfully removed self likes:', result);
 }
 

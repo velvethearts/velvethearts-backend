@@ -15,9 +15,12 @@ export function errorHandler(
 
   const statusCode = res.statusCode !== 200 ? res.statusCode : 500;
   
+  // [M-3 FIX] Mask raw error messages in production to prevent information leakage
+  const isProduction = process.env.NODE_ENV === 'production';
+
   res.status(statusCode).json({
     success: false,
-    message: error.message || 'An internal server error occurred',
-    stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    message: isProduction ? 'An internal server error occurred' : (error.message || 'An internal server error occurred'),
+    stack: isProduction ? undefined : error.stack,
   });
 }

@@ -25,11 +25,24 @@ export class UploadService {
     }
 
     return new Promise((resolve, reject) => {
+      // [H-5 FIX] Determine resource_type and allowed formats based on MIME type
+      const isAudioMime = mimeType?.startsWith('audio/') || mimeType?.includes('webm') || mimeType?.includes('ogg');
+      const uploadOptions: any = {
+        folder,
+      };
+
+      if (isAudioMime) {
+        // Voice intros: use 'video' resource_type (Cloudinary treats audio under 'video')
+        uploadOptions.resource_type = 'video';
+        uploadOptions.allowed_formats = ['mp3', 'ogg', 'wav', 'webm', 'm4a', 'aac'];
+      } else {
+        // Photos: restrict to safe image formats only — blocks SVG/SWF/HTML
+        uploadOptions.resource_type = 'image';
+        uploadOptions.allowed_formats = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+      }
+
       const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder,
-          resource_type: 'auto',
-        },
+        uploadOptions,
         (error, result) => {
           if (error) {
             logger.error('Cloudinary upload failure:', error);

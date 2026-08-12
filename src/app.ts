@@ -11,7 +11,19 @@ import { initSocketServer } from './socket';
 const app = express();
 
 // Security Middlewares
-app.use(helmet());
+// [M-6 FIX] Configure Helmet with CSP appropriate for JSON API
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
+
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -96,17 +108,18 @@ process.on('SIGINT', shutdown);
 export default app;
 
 
-// Code for keeping this server alive on Render.com
-const URL = process.env.URL!
+// [L-6 FIX] Safe self-ping for keeping Render free tier alive
+const pingUrl = process.env.URL;
 
-async function ping() {
-  try {
-    const res = await fetch(URL);
-    console.log(`[${new Date().toLocaleDateString()}] ${res.status}`);
-  } catch (error: any) {
-    console.error(error.message);
+if (pingUrl && pingUrl.startsWith('http')) {
+  async function ping() {
+    try {
+      const res = await fetch(pingUrl!);
+      logger.debug(`[Self-Ping] Render keep-alive status: ${res.status}`);
+    } catch (error: any) {
+      logger.debug(`[Self-Ping] Render keep-alive failed: ${error.message}`);
+    }
   }
+  setInterval(ping, 5 * 60 * 1000); // Ping every 5 minutes
 }
-
-setInterval(ping, 1 * 60 * 1000); // Ping every 1 minute
 

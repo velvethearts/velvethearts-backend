@@ -30,7 +30,7 @@ export class SafetyController {
       });
     } catch (error: any) {
       logger.error('Block controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Blocking user failed' });
+      return res.status(500).json({ success: false, message: 'Blocking user failed' });
     }
   };
 
@@ -58,7 +58,7 @@ export class SafetyController {
       });
     } catch (error: any) {
       logger.error('Report controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Submitting report failed' });
+      return res.status(500).json({ success: false, message: 'Submitting report failed' });
     }
   };
 
@@ -81,7 +81,7 @@ export class SafetyController {
       });
     } catch (error: any) {
       logger.error('Unblock controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Unblocking user failed' });
+      return res.status(500).json({ success: false, message: 'Unblocking user failed' });
     }
   };
 
@@ -99,7 +99,7 @@ export class SafetyController {
       });
     } catch (error: any) {
       logger.error('Get blocked users controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Fetching blocked users failed' });
+      return res.status(500).json({ success: false, message: 'Fetching blocked users failed' });
     }
   };
 }

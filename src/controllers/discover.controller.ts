@@ -55,7 +55,7 @@ export class DiscoverController {
       });
     } catch (error: any) {
       logger.error('getRecommendations controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Retrieving discover feed failed' });
+      return res.status(500).json({ success: false, message: 'Retrieving discover feed failed' });
     }
   };
 
@@ -84,7 +84,7 @@ export class DiscoverController {
       return res.status(200).json({ success: true, message: 'Discover nudges processed', data: result });
     } catch (error: any) {
       logger.error('runDiscoverNudge controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Failed to run discover nudges' });
+      return res.status(500).json({ success: false, message: 'Failed to run discover nudges' });
     }
   };
 }

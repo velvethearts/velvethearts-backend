@@ -31,7 +31,7 @@ export class NotificationController {
       });
     } catch (error: any) {
       logger.error('getNotifications controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Failed to fetch notifications' });
+      return res.status(500).json({ success: false, message: 'Failed to fetch notifications' });
     }
   };
 
@@ -50,7 +50,7 @@ export class NotificationController {
       });
     } catch (error: any) {
       logger.error('markRead controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Failed to update notification' });
+      return res.status(500).json({ success: false, message: 'Failed to update notification' });
     }
   };
 
@@ -68,7 +68,7 @@ export class NotificationController {
       });
     } catch (error: any) {
       logger.error('markAllRead controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Failed to clear notifications' });
+      return res.status(500).json({ success: false, message: 'Failed to clear notifications' });
     }
   };
 
@@ -87,7 +87,7 @@ export class NotificationController {
       });
     } catch (error: any) {
       logger.error('deleteNotification controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Failed to delete notification' });
+      return res.status(500).json({ success: false, message: 'Failed to delete notification' });
     }
   };
 }

@@ -1,5 +1,8 @@
 import rateLimit from 'express-rate-limit';
 
+// [H-1 FIX] Key generator that uses authenticated userId when available, falling back to IP
+const userOrIpKey = (req: any) => req.user?.userId || req.ip;
+
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
@@ -16,6 +19,7 @@ export const apiRateLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: userOrIpKey,
   message: {
     success: false,
     message: 'Rate limit exceeded. Please pace your requests.',
@@ -27,6 +31,7 @@ export const likeRateLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: userOrIpKey,
   message: {
     success: false,
     message: 'Too many like actions. Please wait a moment.',
@@ -38,6 +43,7 @@ export const chatRateLimiter = rateLimit({
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: userOrIpKey,
   message: {
     success: false,
     message: 'Too many messages sent. Please pace your conversation.',
@@ -49,6 +55,7 @@ export const reportRateLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: userOrIpKey,
   message: {
     success: false,
     message: 'Report submission rate limit reached. Please contact support.',
@@ -60,8 +67,21 @@ export const searchDiscoverRateLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: userOrIpKey,
   message: {
     success: false,
     message: 'Too many search queries. Please pace your requests.',
+  },
+});
+
+export const uploadRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+  message: {
+    success: false,
+    message: 'Too many upload requests. Please wait a moment.',
   },
 });

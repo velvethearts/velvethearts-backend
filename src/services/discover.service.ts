@@ -155,6 +155,18 @@ export class DiscoverService {
       };
     }
 
+    // [M-9 FIX] Push DOB range calculation into Prisma to filter candidates at the database layer
+    const ageMin = filters.ageMin ?? 18;
+    const ageMax = filters.ageMax ?? 100;
+    const today = new Date();
+    const dobMin = new Date(today.getFullYear() - ageMax - 1, today.getMonth(), today.getDate());
+    const dobMax = new Date(today.getFullYear() - ageMin, today.getMonth(), today.getDate());
+
+    profileFilters.dob = {
+      gte: dobMin,
+      lte: dobMax,
+    };
+
     if (Object.keys(profileFilters).length > 0) {
       whereClause.profile = {
         is: profileFilters,
@@ -223,8 +235,6 @@ export class DiscoverService {
     });
 
     // Filter by age range
-    const ageMin = filters.ageMin ?? 18;
-    const ageMax = filters.ageMax ?? 100;
     mapped = mapped.filter((c) => c.age >= ageMin && c.age <= ageMax);
 
     // Filter by maximum distance if provided

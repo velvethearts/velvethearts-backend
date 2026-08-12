@@ -41,9 +41,14 @@ export class PushService {
     });
   }
 
-  async unsubscribe(endpoint: string) {
+  // [M-8 FIX] Scope unsubscription to the authenticated user's own subscriptions
+  async unsubscribe(endpoint: string, userId?: string) {
     try {
-      await prisma.pushSubscription.delete({ where: { endpoint } });
+      if (userId) {
+        await prisma.pushSubscription.deleteMany({ where: { endpoint, userId } });
+      } else {
+        await prisma.pushSubscription.delete({ where: { endpoint } });
+      }
     } catch (_) {
       // Ignore if not found
     }

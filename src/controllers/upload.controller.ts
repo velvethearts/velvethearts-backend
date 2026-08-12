@@ -13,6 +13,18 @@ export class UploadController {
         return res.status(400).json({ success: false, message: 'No file uploaded' });
       }
 
+      // [H-5 FIX] Server-side MIME type validation
+      const allowedImageMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      const allowedAudioMimes = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/webm', 'audio/mp4', 'audio/aac', 'audio/x-m4a'];
+      const allowedMimes = [...allowedImageMimes, ...allowedAudioMimes];
+
+      if (!allowedMimes.includes(file.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          message: `File type '${file.mimetype}' is not allowed. Accepted: JPEG, PNG, WebP, GIF, MP3, OGG, WAV, WebM audio.`,
+        });
+      }
+
       const result = await this.uploadService.uploadImage(file.buffer, 'velvet_hearts', file.mimetype);
 
       return res.status(200).json({

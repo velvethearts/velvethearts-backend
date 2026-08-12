@@ -267,13 +267,21 @@ export class ChatRepository {
     });
   }
 
-  async softDeleteUserMessagesInConversation(conversationId: string, _senderId?: string): Promise<{ count: number }> {
+  // [M-7 FIX] Scope soft-deletion to only the requesting user's messages
+  async softDeleteUserMessagesInConversation(conversationId: string, senderId?: string): Promise<{ count: number }> {
     return prisma.$transaction(async (tx) => {
+      const whereClause: any = {
+        conversationId,
+        isDeleted: false,
+      };
+
+      // If senderId is provided, only delete that user's messages
+      if (senderId) {
+        whereClause.senderId = senderId;
+      }
+
       const result = await tx.message.updateMany({
-        where: {
-          conversationId,
-          isDeleted: false,
-        },
+        where: whereClause,
         data: {
           isDeleted: true,
           deletedAt: new Date(),

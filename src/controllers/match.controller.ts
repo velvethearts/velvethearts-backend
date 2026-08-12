@@ -42,7 +42,7 @@ export class MatchController {
       });
     } catch (error: any) {
       logger.error('Like profile controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Liking profile failed' });
+      return res.status(500).json({ success: false, message: 'Liking profile failed' });
     }
   };
 
@@ -66,7 +66,7 @@ export class MatchController {
       });
     } catch (error: any) {
       logger.error('Unlike profile controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Undoing like failed' });
+      return res.status(500).json({ success: false, message: 'Undoing like failed' });
     }
   };
 
@@ -90,7 +90,7 @@ export class MatchController {
       });
     } catch (error: any) {
       logger.error('Unmatch controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Unmatching failed' });
+      return res.status(500).json({ success: false, message: 'Unmatching failed' });
     }
   };
 
@@ -108,7 +108,7 @@ export class MatchController {
       });
     } catch (error: any) {
       logger.error('getConnections controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Retrieving connections failed' });
+      return res.status(500).json({ success: false, message: 'Retrieving connections failed' });
     }
   };
 
@@ -126,7 +126,7 @@ export class MatchController {
       });
     } catch (error: any) {
       logger.error('getReceivedInvites controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Retrieving received invites failed' });
+      return res.status(500).json({ success: false, message: 'Retrieving received invites failed' });
     }
   };
 
@@ -144,7 +144,7 @@ export class MatchController {
       });
     } catch (error: any) {
       logger.error('getSentInvites controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Retrieving sent invites failed' });
+      return res.status(500).json({ success: false, message: 'Retrieving sent invites failed' });
     }
   };
 }

@@ -3,6 +3,19 @@ import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { ProfileService } from '../services/profile.service';
 import { saveProfileSchema } from '../validators/profile.validator';
 import { logger } from '../utils/logger';
+import { z } from 'zod';
+
+// [H-2 FIX] Explicit Zod schema for settings updates — prevents mass assignment
+const updateSettingsSchema = z.object({
+  matchNotifs: z.boolean().optional(),
+  chatNotifs: z.boolean().optional(),
+  interestNotifs: z.boolean().optional(),
+  emailNotifs: z.boolean().optional(),
+  theme: z.enum(['system', 'light', 'dark']).optional(),
+  reduceMotion: z.boolean().optional(),
+  highContrast: z.boolean().optional(),
+  textSize: z.enum(['small', 'medium', 'large']).optional(),
+}).strict();
 
 export class ProfileController {
   private profileService = new ProfileService();
@@ -41,7 +54,7 @@ export class ProfileController {
       });
     } catch (error: any) {
       logger.error('getMe controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Retrieving profile failed' });
+      return res.status(500).json({ success: false, message: 'Retrieving profile failed' });
     }
   };
 
@@ -65,7 +78,7 @@ export class ProfileController {
       });
     } catch (error: any) {
       logger.error('saveProfile controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Saving profile failed' });
+      return res.status(500).json({ success: false, message: 'Saving profile failed' });
     }
   };
 
@@ -86,7 +99,7 @@ export class ProfileController {
       });
     } catch (error: any) {
       logger.error('deleteAccount controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Deleting account failed' });
+      return res.status(500).json({ success: false, message: 'Deleting account failed' });
     }
   };
 
@@ -99,7 +112,7 @@ export class ProfileController {
       return res.status(200).json({ success: true, data: settings });
     } catch (error: any) {
       logger.error('getSettings controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Retrieving settings failed' });
+      return res.status(500).json({ success: false, message: 'Retrieving settings failed' });
     }
   };
 
@@ -108,11 +121,18 @@ export class ProfileController {
       if (!req.user) {
         return res.status(401).json({ success: false, message: 'Authentication required' });
       }
-      const settings = await this.profileService.updateSettings(req.user.userId, req.body);
+
+      // [H-2 FIX] Validate with strict schema to prevent mass assignment
+      const result = updateSettingsSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ success: false, message: result.error.errors[0].message });
+      }
+
+      const settings = await this.profileService.updateSettings(req.user.userId, result.data);
       return res.status(200).json({ success: true, message: 'Settings updated successfully', data: settings });
     } catch (error: any) {
       logger.error('updateSettings controller failure:', error);
-      return res.status(500).json({ success: false, message: error.message || 'Updating settings failed' });
+      return res.status(500).json({ success: false, message: 'Updating settings failed' });
     }
   };
 }

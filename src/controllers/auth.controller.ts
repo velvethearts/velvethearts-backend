@@ -25,7 +25,7 @@ export class AuthController {
       });
     } catch (error: any) {
       logger.error('Firebase login controller failure:', error);
-      return res.status(401).json({ success: false, message: error.message || 'Login failed' });
+      return res.status(401).json({ success: false, message: 'Authentication failed. Please check your credentials.' });
     }
   };
 }
