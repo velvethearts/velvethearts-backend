@@ -1,6 +1,6 @@
 # Velvet Hearts Backend
 
-Last updated: August 10th, 2026  
+Last updated: August 12th, 2026 (v1.0.0 Release)  
 Source of truth: `/docs/Administrator_Manual.docx` and `/docs/User_Manual.docx`
 
 This folder contains the Velvet Hearts backend service. It is a TypeScript Express application that provides REST APIs, authentication token issuance, approval enforcement, admin workflows, moderation workflows, Cloudinary upload brokering, Prisma database access, and Socket.IO realtime behavior.
