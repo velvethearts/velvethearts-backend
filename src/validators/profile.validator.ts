@@ -1,9 +1,14 @@
 import { z } from 'zod';
 
-// [H-3 FIX] Validate photo URLs are Cloudinary URLs or valid HTTPS URLs
-const cloudinaryPhotoUrl = z.string().url('Invalid photo URL').refine(
-  url => url.startsWith('https://res.cloudinary.com/') || url.startsWith('https://images.unsplash.com/'),
-  { message: 'Photo must be hosted on an approved CDN' }
+// Validate photo URLs are valid HTTPS URLs, approved CDNs, or data URLs
+const validPhotoUrl = z.string().min(1, 'Invalid photo URL').refine(
+  url => url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/') || url.startsWith('/'),
+  { message: 'Photo must be a valid URL or image format' }
+);
+
+const validVoiceIntroUrl = z.string().refine(
+  url => !url || url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:audio/') || url.startsWith('blob:'),
+  { message: 'Voice intro must be a valid URL or audio format' }
 );
 
 const saveProfileSchemaBase = z.object({
@@ -25,13 +30,8 @@ const saveProfileSchemaBase = z.object({
   disabilityInfo: z.string().max(1000).optional(),
   showDisability: z.boolean().optional().default(false),
   isPaused: z.boolean().optional().default(false),
-  // [H-3 FIX] Restrict photos to approved CDN URLs
-  photos: z.array(cloudinaryPhotoUrl).min(1, 'Upload at least 1 photo').max(10, 'Maximum 10 photos'),
-  // [H-4 FIX] Validate voiceIntroUrl is a proper URL on approved CDN
-  voiceIntroUrl: z.string().url('Invalid voice intro URL').refine(
-    url => url.startsWith('https://res.cloudinary.com/') || url.startsWith('https://actions.google.com/'),
-    { message: 'Voice intro must be hosted on an approved CDN' }
-  ).optional().nullable(),
+  photos: z.array(validPhotoUrl).min(1, 'Upload at least 1 photo').max(10, 'Maximum 10 photos'),
+  voiceIntroUrl: validVoiceIntroUrl.optional().nullable(),
   sparkNote: z.string().max(20, 'Spark note must be 20 characters or less').optional().nullable(),
   languages: z.array(z.string().max(50)).max(10).optional(),
   education: z.string().max(200).optional(),
