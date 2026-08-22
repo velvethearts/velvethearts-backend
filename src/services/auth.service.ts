@@ -71,6 +71,26 @@ export class AuthService {
 
     let user = await this.userRepository.findByFirebaseUid(firebaseUser.uid);
 
+    if (!user && firebaseUser.email) {
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          email: firebaseUser.email,
+          status: { not: UserStatus.DELETED },
+        },
+        include: { profile: true },
+      });
+      if (existingUser) {
+        user = await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            firebaseUid: firebaseUser.uid,
+            name: existingUser.name || firebaseUser.name || null,
+          },
+          include: { profile: true },
+        });
+      }
+    }
+
     if (user && user.status !== UserStatus.DELETED) {
       const updates: { email?: string; phoneNumber?: string; name?: string } = {};
 
