@@ -4,6 +4,7 @@ import { MatchRepository } from '../repositories/match.repository';
 import { ActivityLogRepository } from '../repositories/activity-log.repository';
 import { prisma } from '../config/database';
 import { calculateProfileCompletion } from './discover.service';
+import { logger } from '../utils/logger';
 
 export interface ProfileInput {
   name: string;
@@ -28,6 +29,7 @@ export interface ProfileInput {
   languages?: string[];
   education?: string;
   occupation?: string;
+  isPaused?: boolean;
 }
 
 export class ProfileService {
@@ -65,6 +67,7 @@ export class ProfileService {
       showDisability: profile.showDisability,
       verified: profile.verified,
       isPremium: profile.isPremium,
+      isPaused: profile.isPaused ?? false,
       photos: profile.photos.map((p) => p.secureUrl),
       voiceIntroUrl: profile.voiceIntroUrl || null,
       sparkNote: profile.sparkNote || null,
@@ -105,6 +108,7 @@ export class ProfileService {
           languages: data.languages || [],
           education: data.education || null,
           occupation: data.occupation || null,
+          isPaused: data.isPaused !== undefined ? data.isPaused : undefined,
         },
         create: {
           userId,
@@ -128,8 +132,16 @@ export class ProfileService {
           languages: data.languages || [],
           education: data.education || null,
           occupation: data.occupation || null,
+          isPaused: data.isPaused ?? false,
         },
       });
+
+      if (data.name) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { name: data.name },
+        }).catch(() => {});
+      }
 
       await tx.photo.deleteMany({
         where: { profileId: profile.id },
@@ -178,11 +190,43 @@ export class ProfileService {
     return this.getProfile(userId);
   }
 
-  async softDeleteAccount(userId: string, ipAddress?: string, userAgent?: string) {
+  async softDeleteAccount(userId: string, ipAddress?: string, userAgent?: string, feedbackData?: any) {
     const user = await this.userRepository.findById(userId);
     if (!user || user.status === 'DELETED') {
       throw new Error('User not found or already deleted');
     }
+
+    const accountDurationDays = user.createdAt
+      ? Math.max(0, Math.floor((Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24)))
+      : 0;
+
+    // Record Deletion Feedback for Product Analytics
+    if (feedbackData && feedbackData.reason) {
+      const validRating =
+        typeof feedbackData.rating === 'number' &&
+        Number.isInteger(feedbackData.rating) &&
+        feedbackData.rating >= 1 &&
+        feedbackData.rating <= 5
+          ? feedbackData.rating
+          : null;
+
+      try {
+        await (prisma as any).deletionFeedback.create({
+          data: {
+            reason: String(feedbackData.reason).trim(),
+            detailedReason: feedbackData.detailedReason ? String(feedbackData.detailedReason).trim() : null,
+            metPartnerOnApp: typeof feedbackData.metPartnerOnApp === 'boolean' ? feedbackData.metPartnerOnApp : null,
+            feedbackText: feedbackData.feedbackText ? String(feedbackData.feedbackText).trim() : null,
+            rating: validRating,
+            accountDurationDays,
+            userRole: user.role || 'USER',
+          },
+        });
+      } catch (fbErr) {
+        logger.error('Failed to record deletion feedback:', fbErr);
+      }
+    }
+
     const activeMatches = await this.matchRepository.findActiveMatchesByUser(userId);
     for (const match of activeMatches) {
       await this.matchRepository.unmatch(match.id, userId);
@@ -198,6 +242,44 @@ export class ProfileService {
     await this.userRepository.delete(userId);
 
     return { success: true };
+  }
+
+  async getDeletionAnalytics() {
+    try {
+      const feedbacks = await (prisma as any).deletionFeedback.findMany({
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const total = feedbacks.length;
+      const reasonCounts: Record<string, number> = {};
+      let metPartnerCount = 0;
+      let totalRating = 0;
+      let ratedCount = 0;
+
+      for (const f of feedbacks) {
+        reasonCounts[f.reason] = (reasonCounts[f.reason] || 0) + 1;
+        if (f.metPartnerOnApp) metPartnerCount++;
+        if (typeof f.rating === 'number') {
+          totalRating += f.rating;
+          ratedCount++;
+        }
+      }
+
+      return {
+        totalDeletions: total,
+        metPartnerPercentage: total > 0 ? Math.round((metPartnerCount / total) * 100) : 0,
+        averageRating: ratedCount > 0 ? Number((totalRating / ratedCount).toFixed(1)) : null,
+        reasonsBreakdown: Object.entries(reasonCounts).map(([reason, count]) => ({
+          reason,
+          count,
+          percentage: Math.round((count / total) * 100),
+        })),
+        recentFeedbacks: feedbacks.slice(0, 20),
+      };
+    } catch (err) {
+      logger.error('Failed to retrieve deletion analytics:', err);
+      return { totalDeletions: 0, metPartnerPercentage: 0, averageRating: null, reasonsBreakdown: [], recentFeedbacks: [] };
+    }
   }
 
   async getSettings(userId: string) {

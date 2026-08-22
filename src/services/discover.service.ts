@@ -102,7 +102,9 @@ export class DiscoverService {
       },
     };
 
-    const profileFilters: any = {};
+    const profileFilters: any = {
+      isPaused: false,
+    };
 
     if (filters.gender && filters.gender !== 'All') {
       const g = filters.gender.toLowerCase();

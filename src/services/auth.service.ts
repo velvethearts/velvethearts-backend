@@ -72,10 +72,14 @@ export class AuthService {
     let user = await this.userRepository.findByFirebaseUid(firebaseUser.uid);
 
     if (user && user.status !== UserStatus.DELETED) {
-      const updates: { email?: string; phoneNumber?: string } = {};
+      const updates: { email?: string; phoneNumber?: string; name?: string } = {};
 
       if (firebaseUser.email && user.email !== firebaseUser.email) {
         updates.email = firebaseUser.email;
+      }
+
+      if (firebaseUser.name && user.name !== firebaseUser.name) {
+        updates.name = firebaseUser.name;
       }
 
       if (phoneNumber && user.phoneNumber !== phoneNumber) {
@@ -83,9 +87,20 @@ export class AuthService {
       }
 
       if (Object.keys(updates).length > 0) {
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: updates,
+        user = await prisma.$transaction(async (tx) => {
+          const updatedUser = await tx.user.update({
+            where: { id: user.id },
+            data: updates,
+          });
+
+          if (updates.name) {
+            await tx.profile.updateMany({
+              where: { userId: user.id },
+              data: { name: updates.name },
+            });
+          }
+
+          return updatedUser;
         });
       }
 
@@ -94,6 +109,7 @@ export class AuthService {
         action: 'USER_LOGIN',
         details: JSON.stringify({
           firebaseUid: firebaseUser.uid,
+          name: user.name,
           email: user.email,
           phoneNumber: user.phoneNumber,
           provider: 'FIREBASE',
@@ -147,6 +163,7 @@ export class AuthService {
         data: {
           firebaseUid: firebaseUser.uid,
           phoneNumber: phoneNumber || '',
+          name: firebaseUser.name || null,
           email: firebaseUser.email,
           role: Role.USER,
           approvalStatus: ApprovalStatus.APPROVED,

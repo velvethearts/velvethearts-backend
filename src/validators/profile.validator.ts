@@ -24,6 +24,7 @@ const saveProfileSchemaBase = z.object({
   hasDisability: z.boolean().optional().default(false),
   disabilityInfo: z.string().max(1000).optional(),
   showDisability: z.boolean().optional().default(false),
+  isPaused: z.boolean().optional().default(false),
   // [H-3 FIX] Restrict photos to approved CDN URLs
   photos: z.array(cloudinaryPhotoUrl).min(1, 'Upload at least 1 photo').max(10, 'Maximum 10 photos'),
   // [H-4 FIX] Validate voiceIntroUrl is a proper URL on approved CDN

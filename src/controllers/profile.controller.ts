@@ -91,7 +91,7 @@ export class ProfileController {
       const ip = req.ip;
       const ua = req.headers['user-agent'];
 
-      await this.profileService.softDeleteAccount(req.user.userId, ip, ua);
+      await this.profileService.softDeleteAccount(req.user.userId, ip, ua, req.body);
 
       return res.status(200).json({
         success: true,
