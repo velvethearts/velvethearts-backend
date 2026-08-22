@@ -11,6 +11,7 @@ const updateSettingsSchema = z.object({
   chatNotifs: z.boolean().optional(),
   interestNotifs: z.boolean().optional(),
   emailNotifs: z.boolean().optional(),
+  rewindLettersEnabled: z.boolean().optional(),
   theme: z.enum(['system', 'light', 'dark']).optional(),
   reduceMotion: z.boolean().optional(),
   highContrast: z.boolean().optional(),

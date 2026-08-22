@@ -62,6 +62,12 @@ export class SafetyService {
             unmatchedBy: blockerId,
           },
         });
+
+        // Void any sealed rewind letters for this match
+        await tx.rewindLetter.updateMany({
+          where: { matchId: match.id, status: 'SEALED' },
+          data: { status: 'VOIDED' },
+        });
       }
     });
 

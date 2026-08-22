@@ -9,7 +9,8 @@
     "start": "tsc && node dist/app.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "test:deliver-letters": "node src/scripts/trigger-deliver.js"
   },
   "dependencies": {
     "@prisma/client": "^5.12.1",

@@ -13,6 +13,7 @@ import { UploadController } from '../controllers/upload.controller';
 import { SearchController } from '../controllers/search.controller';
 import { NotificationController } from '../controllers/notification.controller';
 import { PushController } from '../controllers/push.controller';
+import { RewindLetterController } from '../controllers/rewind-letter.controller';
 
 // Middlewares
 import { requireAuth, requireRole } from '../middlewares/auth.middleware';
@@ -39,6 +40,7 @@ const adminCtrl = new AdminController();
 const uploadCtrl = new UploadController();
 const notifCtrl = new NotificationController();
 const pushCtrl = new PushController();
+const rewindLetterCtrl = new RewindLetterController();
 
 // ==========================================
 // AUTH ROUTES
@@ -73,6 +75,13 @@ router.post('/match/unmatch', requireAuth,  matchCtrl.unmatch);
 router.get('/match/connections', requireAuth,  matchCtrl.getConnections);
 router.get('/match/received-invites', requireAuth, matchCtrl.getReceivedInvites);
 router.get('/match/sent-invites', requireAuth, matchCtrl.getSentInvites);
+
+// ==========================================
+// REWIND LETTER ROUTES
+// ==========================================
+router.post('/rewind-letter', requireAuth, rewindLetterCtrl.write);
+router.get('/rewind-letter/:matchId/status', requireAuth, rewindLetterCtrl.getStatus);
+router.get('/rewind-letter/:matchId/content', requireAuth, rewindLetterCtrl.getDelivered);
 
 // ==========================================
 // SAFETY ROUTES (BLOCK & REPORT)

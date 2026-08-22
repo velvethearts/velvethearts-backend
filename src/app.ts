@@ -123,3 +123,16 @@ if (pingUrl && pingUrl.startsWith('http')) {
   setInterval(ping, 5 * 60 * 1000); // Ping every 5 minutes
 }
 
+// Rewind Letter scheduled sweep — delivers sealed letters that have met their trigger
+import { RewindLetterService } from './services/rewind-letter.service';
+import { REWIND_LETTER_SWEEP_INTERVAL_MS } from './constants/rewind-letter.constants';
+
+const rewindLetterSweep = new RewindLetterService();
+setInterval(async () => {
+  try {
+    await rewindLetterSweep.sweepAndDeliverLetters();
+  } catch (err: any) {
+    logger.error(`[RewindLetter] Sweep error: ${err?.message || err}`);
+  }
+}, REWIND_LETTER_SWEEP_INTERVAL_MS);
+

@@ -5,12 +5,14 @@ import { ApprovalStatus, NotificationType, UserStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { io } from '../socket'; 
 import { PushService } from './push.service';
+import { RewindLetterService } from './rewind-letter.service';
 
 export class MatchService {
   private likeRepository = new LikeRepository();
   private matchRepository = new MatchRepository();
   private logRepository = new ActivityLogRepository();
   private pushService = new PushService();
+  private rewindLetterService = new RewindLetterService();
 
   async likeProfile(senderId: string, receiverId: string, isSuper: boolean = false, comment: string | null = null) {
     if (senderId === receiverId) {
@@ -318,6 +320,9 @@ export class MatchService {
         where: { conversationId: conversation.id },
       });
     }
+
+    // Void any sealed rewind letters for this match
+    await this.rewindLetterService.voidLettersByMatch(matchId);
 
     await this.logRepository.create({
       userId,

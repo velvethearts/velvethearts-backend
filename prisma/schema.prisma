@@ -118,6 +118,7 @@ model UserSettings {
   chatNotifs             Boolean  @default(true)
   interestNotifs         Boolean  @default(true)
   emailNotifs            Boolean  @default(false)
+  rewindLettersEnabled   Boolean  @default(true)
   lastDiscoverViewedAt   DateTime?
   lastDiscoverNudgedAt   DateTime?
   createdAt              DateTime @default(now())
@@ -139,16 +140,17 @@ model Like {
 }
 
 model Match {
-  id           String        @id @default(uuid())
-  user1Id      String
-  user2Id      String
-  unmatched    Boolean       @default(false)
-  unmatchedAt  DateTime?
-  unmatchedBy  String?
-  createdAt    DateTime      @default(now())
-  conversation Conversation?
-  user1        User          @relation("MatchesAsUser1", fields: [user1Id], references: [id], onDelete: Cascade)
-  user2        User          @relation("MatchesAsUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+  id             String          @id @default(uuid())
+  user1Id        String
+  user2Id        String
+  unmatched      Boolean         @default(false)
+  unmatchedAt    DateTime?
+  unmatchedBy    String?
+  createdAt      DateTime        @default(now())
+  conversation   Conversation?
+  rewindLetters  RewindLetter[]
+  user1          User            @relation("MatchesAsUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2          User            @relation("MatchesAsUser2", fields: [user2Id], references: [id], onDelete: Cascade)
 
   @@unique([user1Id, user2Id])
 }
@@ -320,6 +322,7 @@ enum NotificationType {
   SYSTEM
   REPORT_UPDATE
   ADMIN_NOTICE
+  REWIND_LETTER
 }
 
 enum FileType {
@@ -341,4 +344,25 @@ model DeletionFeedback {
   createdAt           DateTime @default(now())
 
   @@index([reason, createdAt])
+}
+
+enum RewindLetterStatus {
+  SEALED
+  DELIVERED
+  VOIDED
+}
+
+model RewindLetter {
+  id           String              @id @default(uuid())
+  matchId      String
+  authorId     String
+  content      String
+  deliverAfter DateTime
+  deliveredAt  DateTime?
+  status       RewindLetterStatus  @default(SEALED)
+  createdAt    DateTime            @default(now())
+  match        Match               @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, authorId])
+  @@index([status, deliverAfter])
 }
