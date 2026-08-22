@@ -98,7 +98,8 @@ export class AuthService {
         updates.email = firebaseUser.email;
       }
 
-      if (firebaseUser.name && user.name !== firebaseUser.name) {
+      // Only populate name from Firebase if the user has no name set yet (never overwrite custom profile name)
+      if (firebaseUser.name && !user.name) {
         updates.name = firebaseUser.name;
       }
 
@@ -107,20 +108,9 @@ export class AuthService {
       }
 
       if (Object.keys(updates).length > 0) {
-        user = await prisma.$transaction(async (tx) => {
-          const updatedUser = await tx.user.update({
-            where: { id: user.id },
-            data: updates,
-          });
-
-          if (updates.name) {
-            await tx.profile.updateMany({
-              where: { userId: user.id },
-              data: { name: updates.name },
-            });
-          }
-
-          return updatedUser;
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: updates,
         });
       }
 
