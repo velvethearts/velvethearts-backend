@@ -202,9 +202,6 @@ export class RewindLetterService {
     if (!letter) {
       throw new Error('Letter not found');
     }
-    if (letter.status !== RewindLetterStatus.SEALED) {
-      throw new Error('Delivered letters cannot be deleted');
-    }
 
     await prisma.rewindLetter.delete({
       where: { id: letter.id },
