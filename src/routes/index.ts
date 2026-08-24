@@ -91,11 +91,11 @@ router.get('/rewind-letter/:matchId/content', requireAuth, rewindLetterCtrl.getD
 // ==========================================
 // OUR DIARY ROUTES
 // ==========================================
-router.get('/diary/:matchId', requireAuth, diaryCtrl.getEntries);
-router.post('/diary/:matchId/message', requireAuth, diaryCtrl.saveMessage);
-router.post('/diary/:matchId/note', requireAuth, diaryCtrl.addNote);
-router.post('/diary/:matchId/photo', requireAuth, upload.single('photo'), diaryCtrl.uploadPhoto);
-router.delete('/diary/:matchId/:entryId', requireAuth, diaryCtrl.deleteEntry);
+router.get('/diary/:matchId', requireAuth, chatRateLimiter, diaryCtrl.getEntries);
+router.post('/diary/:matchId/message', requireAuth, chatRateLimiter, diaryCtrl.saveMessage);
+router.post('/diary/:matchId/note', requireAuth, chatRateLimiter, diaryCtrl.addNote);
+router.post('/diary/:matchId/photo', requireAuth, uploadRateLimiter, upload.single('photo'), diaryCtrl.uploadPhoto);
+router.delete('/diary/:matchId/:entryId', requireAuth, chatRateLimiter, diaryCtrl.deleteEntry);
 
 // ==========================================
 // SAFETY ROUTES (BLOCK & REPORT)

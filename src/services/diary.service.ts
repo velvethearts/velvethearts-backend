@@ -111,6 +111,47 @@ export class DiaryService {
       }
     }
 
+    // Debounce duplicate saves (within 15s window)
+    const recentDuplicate = await (prisma as any).diaryEntry.findFirst({
+      where: {
+        matchId,
+        savedByUserId: userId,
+        sourceType,
+        attachmentUrl: attachmentUrl || undefined,
+        createdAt: { gte: new Date(Date.now() - 15000) },
+      },
+      include: {
+        savedBy: {
+          select: {
+            id: true,
+            profile: {
+              select: {
+                name: true,
+                photos: { take: 1, select: { secureUrl: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (recentDuplicate) {
+      return {
+        id: recentDuplicate.id,
+        matchId: recentDuplicate.matchId,
+        savedByUserId: recentDuplicate.savedByUserId,
+        savedByName: recentDuplicate.savedBy?.profile?.name || 'Partner',
+        savedByPhoto: recentDuplicate.savedBy?.profile?.photos?.[0]?.secureUrl || null,
+        isMine: true,
+        sourceType: recentDuplicate.sourceType,
+        content,
+        attachmentUrl: recentDuplicate.attachmentUrl,
+        attachmentPublicId: recentDuplicate.attachmentPublicId,
+        caption: recentDuplicate.caption ? decryptMessage(recentDuplicate.caption) : null,
+        createdAt: recentDuplicate.createdAt,
+      };
+    }
+
     const encryptedContent = content ? (encryptMessage(content) ?? null) : null;
     const encryptedCaption = caption?.trim() ? (encryptMessage(caption.trim()) ?? null) : null;
 
@@ -238,30 +279,39 @@ export class DiaryService {
 
     const encryptedCaption = caption?.trim() ? (encryptMessage(caption.trim()) ?? null) : null;
 
-    const newEntry = await (prisma as any).diaryEntry.create({
-      data: {
-        matchId,
-        savedByUserId: userId,
-        sourceType: 'IMAGE',
-        content: null,
-        attachmentUrl: uploadResult.secureUrl,
-        attachmentPublicId: uploadResult.publicId,
-        caption: encryptedCaption,
-      },
-      include: {
-        savedBy: {
-          select: {
-            id: true,
-            profile: {
-              select: {
-                name: true,
-                photos: { take: 1, select: { secureUrl: true } },
+    let newEntry;
+    try {
+      newEntry = await (prisma as any).diaryEntry.create({
+        data: {
+          matchId,
+          savedByUserId: userId,
+          sourceType: 'IMAGE',
+          content: null,
+          attachmentUrl: uploadResult.secureUrl,
+          attachmentPublicId: uploadResult.publicId,
+          caption: encryptedCaption,
+        },
+        include: {
+          savedBy: {
+            select: {
+              id: true,
+              profile: {
+                select: {
+                  name: true,
+                  photos: { take: 1, select: { secureUrl: true } },
+                },
               },
             },
           },
         },
-      },
-    });
+      });
+    } catch (dbErr) {
+      // If DB insert fails, cleanup Cloudinary asset so no orphaned files remain
+      if (uploadResult.publicId) {
+        await this.uploadService.deleteAsset(uploadResult.publicId);
+      }
+      throw dbErr;
+    }
 
     if (match.conversation?.id) {
       io.to(`conversation_${match.conversation.id}`).emit('diary_entry_added', {
