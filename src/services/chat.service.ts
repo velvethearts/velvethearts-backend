@@ -34,7 +34,7 @@ export class ChatService {
         
         let lastMsgText = '';
         if (lastMsg) {
-          if (lastMsg.text === '__REWIND_CAPSULE__') {
+          if (lastMsg.text?.startsWith('__REWIND_CAPSULE__')) {
             lastMsgText = '🔒 Rewind Letter sealed';
           } else if (lastMsg.text) {
             lastMsgText = lastMsg.text;

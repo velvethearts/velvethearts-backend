@@ -122,7 +122,7 @@ export class RewindLetterService {
         data: {
           conversationId: conversation.id,
           senderId: authorId,
-          text: '__REWIND_CAPSULE__',
+          text: `__REWIND_CAPSULE__:${deliverAfter.toISOString()}`,
         },
       });
 
