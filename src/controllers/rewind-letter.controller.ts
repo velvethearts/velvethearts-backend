@@ -5,18 +5,31 @@ import { logger } from '../utils/logger';
 import { z } from 'zod';
 import {
   REWIND_LETTER_MAX_LENGTH,
+  REWIND_LETTER_MAX_WORDS,
   REWIND_LETTER_MIN_DELIVERY_DAYS,
   REWIND_LETTER_MAX_DELIVERY_DAYS,
 } from '../constants/rewind-letter.constants';
 
+const countWords = (str: string) => str.trim().split(/\s+/).filter(Boolean).length;
+
 const writeLetterSchema = z.object({
   matchId: z.string().uuid('Invalid match ID'),
-  content: z.string().min(1, 'Letter cannot be empty').max(REWIND_LETTER_MAX_LENGTH, `Letter must be ${REWIND_LETTER_MAX_LENGTH} characters or fewer`),
+  content: z.string()
+    .min(1, 'Letter cannot be empty')
+    .max(REWIND_LETTER_MAX_LENGTH, 'Letter payload is too long')
+    .refine((val) => countWords(val) <= REWIND_LETTER_MAX_WORDS, {
+      message: `Letter must be ${REWIND_LETTER_MAX_WORDS} words or fewer`,
+    }),
   deliveryDays: z.number().int().min(REWIND_LETTER_MIN_DELIVERY_DAYS, `Unlock duration must be at least ${REWIND_LETTER_MIN_DELIVERY_DAYS} days`).max(REWIND_LETTER_MAX_DELIVERY_DAYS, `Unlock duration cannot exceed ${REWIND_LETTER_MAX_DELIVERY_DAYS} days`).optional(),
 });
 
 const editLetterSchema = z.object({
-  content: z.string().min(1, 'Letter cannot be empty').max(REWIND_LETTER_MAX_LENGTH, `Letter must be ${REWIND_LETTER_MAX_LENGTH} characters or fewer`),
+  content: z.string()
+    .min(1, 'Letter cannot be empty')
+    .max(REWIND_LETTER_MAX_LENGTH, 'Letter payload is too long')
+    .refine((val) => countWords(val) <= REWIND_LETTER_MAX_WORDS, {
+      message: `Letter must be ${REWIND_LETTER_MAX_WORDS} words or fewer`,
+    }),
   deliveryDays: z.number().int().min(REWIND_LETTER_MIN_DELIVERY_DAYS, `Unlock duration must be at least ${REWIND_LETTER_MIN_DELIVERY_DAYS} days`).max(REWIND_LETTER_MAX_DELIVERY_DAYS, `Unlock duration cannot exceed ${REWIND_LETTER_MAX_DELIVERY_DAYS} days`).optional(),
 });
 

@@ -8,11 +8,16 @@ import {
   REWIND_LETTER_MIN_DELIVERY_DAYS,
   REWIND_LETTER_MAX_DELIVERY_DAYS,
   REWIND_LETTER_EDIT_WINDOW_HOURS,
+  REWIND_LETTER_MAX_WORDS,
   REWIND_LETTER_MAX_LENGTH,
 } from '../constants/rewind-letter.constants';
 
 export class RewindLetterService {
   private pushService = new PushService();
+
+  private countWords(str: string): number {
+    return str.trim().split(/\s+/).filter(Boolean).length;
+  }
 
   /**
    * Write (seal) a rewind letter for a match.
@@ -22,8 +27,12 @@ export class RewindLetterService {
     if (!content || content.trim().length === 0) {
       throw new Error('Letter content cannot be empty');
     }
+    const words = this.countWords(content);
+    if (words > REWIND_LETTER_MAX_WORDS) {
+      throw new Error(`Letter must be ${REWIND_LETTER_MAX_WORDS} words or fewer (currently ${words} words)`);
+    }
     if (content.length > REWIND_LETTER_MAX_LENGTH) {
-      throw new Error(`Letter must be ${REWIND_LETTER_MAX_LENGTH} characters or fewer`);
+      throw new Error('Letter exceeds maximum allowed length');
     }
 
     // Validate deliveryDays if supplied
@@ -123,8 +132,12 @@ export class RewindLetterService {
     if (!content || content.trim().length === 0) {
       throw new Error('Letter content cannot be empty');
     }
+    const words = this.countWords(content);
+    if (words > REWIND_LETTER_MAX_WORDS) {
+      throw new Error(`Letter must be ${REWIND_LETTER_MAX_WORDS} words or fewer (currently ${words} words)`);
+    }
     if (content.length > REWIND_LETTER_MAX_LENGTH) {
-      throw new Error(`Letter must be ${REWIND_LETTER_MAX_LENGTH} characters or fewer`);
+      throw new Error('Letter exceeds maximum allowed length');
     }
 
     let deliverAfter = letter.deliverAfter;

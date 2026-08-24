@@ -12,8 +12,11 @@ export const REWIND_LETTER_MAX_DELIVERY_DAYS = 90;
 /** Allowed window in hours after writing for the author to edit content (48 hours = 2 days) */
 export const REWIND_LETTER_EDIT_WINDOW_HOURS = 48;
 
-/** Maximum character length for a rewind letter */
-export const REWIND_LETTER_MAX_LENGTH = 500;
+/** Maximum word count for a rewind letter */
+export const REWIND_LETTER_MAX_WORDS = 500;
+
+/** Maximum character length safety ceiling for a rewind letter */
+export const REWIND_LETTER_MAX_LENGTH = 4000;
 
 /** How often (ms) the background sweep checks for letters ready to deliver */
 export const REWIND_LETTER_SWEEP_INTERVAL_MS = 60_000; // 1 minute
