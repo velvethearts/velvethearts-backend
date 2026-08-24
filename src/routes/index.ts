@@ -28,7 +28,7 @@ import {
 } from '../middlewares/rate-limiter.middleware';
 
 const router = Router();
-const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit
+const upload = multer({ limits: { fileSize: 100 * 1024 * 1024 } }); // 100MB limit for 1-2 min HD/4K videos and photos
 
 const authCtrl = new AuthController();
 const profileCtrl = new ProfileController();
