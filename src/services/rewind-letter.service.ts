@@ -98,6 +98,60 @@ export class RewindLetterService {
       logger.warn('[RewindLetter] Failed to create sealed notification:', e);
     }
 
+    // Inject a unique Rewind Capsule card message directly into the chat conversation
+    try {
+      let conversation = await prisma.conversation.findUnique({
+        where: { matchId },
+      });
+
+      if (!conversation) {
+        conversation = await prisma.conversation.create({
+          data: {
+            matchId,
+            participants: {
+              create: [
+                { userId: authorId },
+                { userId: partnerId },
+              ],
+            },
+          },
+        });
+      }
+
+      const chatMessage = await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          senderId: authorId,
+          text: '__REWIND_CAPSULE__',
+        },
+      });
+
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
+      });
+
+      if (io) {
+        const socketPayload = {
+          conversationId: conversation.id,
+          message: {
+            id: chatMessage.id,
+            senderId: chatMessage.senderId,
+            text: chatMessage.text,
+            isEdited: false,
+            isDeleted: false,
+            attachments: [],
+            createdAt: chatMessage.createdAt,
+            updatedAt: chatMessage.updatedAt,
+          },
+        };
+        io.to(partnerId).emit('new_message', socketPayload);
+        io.to(authorId).emit('new_message', socketPayload);
+      }
+    } catch (msgErr) {
+      logger.warn('[RewindLetter] Failed to inject capsule chat message:', msgErr);
+    }
+
     logger.info(`[RewindLetter] Letter sealed by ${authorId} for match ${matchId} (unlock in ${days} days)`);
     return {
       id: letter.id,

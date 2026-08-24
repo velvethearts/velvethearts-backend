@@ -34,7 +34,9 @@ export class ChatService {
         
         let lastMsgText = '';
         if (lastMsg) {
-          if (lastMsg.text) {
+          if (lastMsg.text === '__REWIND_CAPSULE__') {
+            lastMsgText = '🔒 Rewind Letter sealed';
+          } else if (lastMsg.text) {
             lastMsgText = lastMsg.text;
           } else if (Array.isArray(lastMsg.attachments) && lastMsg.attachments.length > 0) {
             const firstAtt = lastMsg.attachments[0];
