@@ -47,9 +47,8 @@ export class RewindLetterService {
       throw new Error('You already have a sealed letter waiting for delivery in this chat');
     }
 
-    // Compute deliverAfter: match createdAt + days (or now + days if later)
-    const baseDate = new Date(match.createdAt);
-    const deliverAfter = new Date(baseDate);
+    // Compute deliverAfter: now (letter creation time) + days
+    const deliverAfter = new Date();
     deliverAfter.setDate(deliverAfter.getDate() + days);
 
     const letter = await prisma.rewindLetter.create({
@@ -131,7 +130,7 @@ export class RewindLetterService {
     let deliverAfter = letter.deliverAfter;
     if (typeof deliveryDays === 'number' && Number.isInteger(deliveryDays)) {
       const days = Math.max(REWIND_LETTER_MIN_DELIVERY_DAYS, Math.min(REWIND_LETTER_MAX_DELIVERY_DAYS, deliveryDays));
-      deliverAfter = new Date(letter.match.createdAt);
+      deliverAfter = new Date(letter.createdAt);
       deliverAfter.setDate(deliverAfter.getDate() + days);
     }
 
@@ -179,7 +178,7 @@ export class RewindLetterService {
       throw new Error('Only sealed letters can be rescheduled');
     }
 
-    const deliverAfter = new Date(letter.match.createdAt);
+    const deliverAfter = new Date(letter.createdAt);
     deliverAfter.setDate(deliverAfter.getDate() + deliveryDays);
 
     const updated = await prisma.rewindLetter.update({
