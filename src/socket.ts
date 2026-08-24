@@ -208,42 +208,6 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string | st
       }
     });
 
-    // ============================================================
-    // [C-3 FIX] Verify active match before allowing nudge_spark
-    // [C-2 FIX] Rate limited
-    // ============================================================
-    socket.on('nudge_spark', async ({ targetUserId, senderName }: { targetUserId: string; senderName?: string }) => {
-      if (!targetUserId) return;
-      if (!checkEventRate(socket.id, 'nudge_spark', 10)) return;
-
-      try {
-        // Verify an active match exists between the sender and target
-        const match = await prisma.match.findFirst({
-          where: {
-            unmatched: false,
-            OR: [
-              { user1Id: userId, user2Id: targetUserId },
-              { user1Id: targetUserId, user2Id: userId },
-            ],
-          },
-        });
-
-        if (!match) {
-          logger.warn(`Socket: User ${userId} attempted nudge_spark to non-matched user ${targetUserId}`);
-          return;
-        }
-
-        io.to(targetUserId).emit('spark_nudged', {
-          senderId: userId,
-          senderName: senderName || 'Someone',
-          message: `${senderName || 'Someone'} nudged your spark! Say hi 👋`,
-          timestamp: new Date().toISOString()
-        });
-      } catch (err: any) {
-        logger.error('Socket nudge_spark error:', err?.message || err);
-      }
-    });
-
     socket.on('disconnect', () => {
       // Clean up rate limit buckets for this socket
       cleanupSocketBuckets(socket.id);
