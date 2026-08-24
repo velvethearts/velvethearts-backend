@@ -84,4 +84,14 @@ export class UploadService {
       uploadStream.end(fileBuffer);
     });
   }
+
+  async deleteAsset(publicId: string, resourceType: 'image' | 'video' = 'image'): Promise<void> {
+    if (!publicId || publicId.startsWith('mock_')) return;
+    try {
+      await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+      logger.info(`[Cloudinary Asset Deleted] ${publicId}`);
+    } catch (err) {
+      logger.warn(`Failed to delete Cloudinary asset ${publicId}:`, err);
+    }
+  }
 }

@@ -2,11 +2,13 @@ import { BlockRepository } from '../repositories/block.repository';
 import { ReportRepository } from '../repositories/report.repository';
 import { ActivityLogRepository } from '../repositories/activity-log.repository';
 import { prisma } from '../config/database';
+import { DiaryService } from './diary.service';
 
 export class SafetyService {
   private blockRepository = new BlockRepository();
   private reportRepository = new ReportRepository();
   private logRepository = new ActivityLogRepository();
+  private diaryService = new DiaryService();
 
   private async resolveUserId(idOrProfileId: string): Promise<string> {
     if (!idOrProfileId) return idOrProfileId;
@@ -68,6 +70,9 @@ export class SafetyService {
           where: { matchId: match.id, status: 'SEALED' },
           data: { status: 'VOIDED' },
         });
+
+        // Clean up all diary entries and Cloudinary photos for this match
+        await this.diaryService.deleteDiaryForMatch(match.id);
       }
     });
 

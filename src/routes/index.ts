@@ -14,6 +14,7 @@ import { SearchController } from '../controllers/search.controller';
 import { NotificationController } from '../controllers/notification.controller';
 import { PushController } from '../controllers/push.controller';
 import { RewindLetterController } from '../controllers/rewind-letter.controller';
+import { DiaryController } from '../controllers/diary.controller';
 
 // Middlewares
 import { requireAuth, requireRole } from '../middlewares/auth.middleware';
@@ -41,6 +42,7 @@ const uploadCtrl = new UploadController();
 const notifCtrl = new NotificationController();
 const pushCtrl = new PushController();
 const rewindLetterCtrl = new RewindLetterController();
+const diaryCtrl = new DiaryController();
 
 // ==========================================
 // AUTH ROUTES
@@ -85,6 +87,15 @@ router.delete('/rewind-letter/:matchId', requireAuth, rewindLetterCtrl.delete);
 router.patch('/rewind-letter/:matchId/schedule', requireAuth, rewindLetterCtrl.updateSchedule);
 router.get('/rewind-letter/:matchId/status', requireAuth, rewindLetterCtrl.getStatus);
 router.get('/rewind-letter/:matchId/content', requireAuth, rewindLetterCtrl.getDelivered);
+
+// ==========================================
+// OUR DIARY ROUTES
+// ==========================================
+router.get('/diary/:matchId', requireAuth, diaryCtrl.getEntries);
+router.post('/diary/:matchId/message', requireAuth, diaryCtrl.saveMessage);
+router.post('/diary/:matchId/note', requireAuth, diaryCtrl.addNote);
+router.post('/diary/:matchId/photo', requireAuth, upload.single('photo'), diaryCtrl.uploadPhoto);
+router.delete('/diary/:matchId/:entryId', requireAuth, diaryCtrl.deleteEntry);
 
 // ==========================================
 // SAFETY ROUTES (BLOCK & REPORT)

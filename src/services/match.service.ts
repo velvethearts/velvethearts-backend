@@ -6,6 +6,7 @@ import { prisma } from '../config/database';
 import { io } from '../socket'; 
 import { PushService } from './push.service';
 import { RewindLetterService } from './rewind-letter.service';
+import { DiaryService } from './diary.service';
 
 export class MatchService {
   private likeRepository = new LikeRepository();
@@ -13,6 +14,7 @@ export class MatchService {
   private logRepository = new ActivityLogRepository();
   private pushService = new PushService();
   private rewindLetterService = new RewindLetterService();
+  private diaryService = new DiaryService();
 
   async likeProfile(senderId: string, receiverId: string, isSuper: boolean = false, comment: string | null = null) {
     if (senderId === receiverId) {
@@ -323,6 +325,9 @@ export class MatchService {
 
     // Void any sealed rewind letters for this match
     await this.rewindLetterService.voidLettersByMatch(matchId);
+
+    // Clean up all diary entries and Cloudinary photos for this match
+    await this.diaryService.deleteDiaryForMatch(matchId);
 
     await this.logRepository.create({
       userId,
