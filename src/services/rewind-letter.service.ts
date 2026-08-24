@@ -142,6 +142,12 @@ export class RewindLetterService {
       },
     });
 
+    const partnerId = letter.match.user1Id === authorId ? letter.match.user2Id : letter.match.user1Id;
+    if (io) {
+      io.to(authorId).emit('rewind_letter_updated', { matchId, isAuthor: true });
+      io.to(partnerId).emit('rewind_letter_updated', { matchId, isAuthor: false });
+    }
+
     logger.info(`[RewindLetter] Letter ${letter.id} edited by author ${authorId}`);
     return {
       id: updated.id,
@@ -180,6 +186,12 @@ export class RewindLetterService {
       where: { id: letter.id },
       data: { deliverAfter },
     });
+
+    const partnerId = letter.match.user1Id === authorId ? letter.match.user2Id : letter.match.user1Id;
+    if (io) {
+      io.to(authorId).emit('rewind_letter_updated', { matchId, isAuthor: true });
+      io.to(partnerId).emit('rewind_letter_updated', { matchId, isAuthor: false });
+    }
 
     logger.info(`[RewindLetter] Delivery rescheduled for letter ${letter.id} to ${deliverAfter.toISOString()}`);
     return {
