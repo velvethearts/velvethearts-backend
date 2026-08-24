@@ -1,7 +1,18 @@
 import { prisma } from '../config/database';
 import { Conversation, Message, ConversationParticipant, FileType } from '@prisma/client';
+import { encryptMessage, decryptMessage } from '../utils/crypto';
 
 export class ChatRepository {
+  private decryptMessageRecord<T extends { text?: string | null; replyTo?: { text?: string | null } | null }>(msg: T | null): T | null {
+    if (!msg) return msg;
+    if (msg.text) {
+      msg.text = decryptMessage(msg.text) ?? msg.text;
+    }
+    if (msg.replyTo && msg.replyTo.text) {
+      msg.replyTo.text = decryptMessage(msg.replyTo.text) ?? msg.replyTo.text;
+    }
+    return msg;
+  }
   async findOrCreateConversation(matchId: string, participantIds: string[]): Promise<Conversation & { participants: ConversationParticipant[] }> {
     const existing = await prisma.conversation.findUnique({
       where: { matchId },
@@ -81,7 +92,7 @@ export class ChatRepository {
   }
 
   async findUserConversations(userId: string): Promise<any[]> {
-    return prisma.conversation.findMany({
+    const conversations = await prisma.conversation.findMany({
       where: {
         participants: {
           some: { userId },
@@ -132,6 +143,14 @@ export class ChatRepository {
         updatedAt: 'desc',
       },
     });
+
+    // Decrypt the latest message previews for all conversations
+    return conversations.map((c) => {
+      if (Array.isArray(c.messages)) {
+        c.messages = c.messages.map((m: any) => this.decryptMessageRecord(m));
+      }
+      return c;
+    });
   }
 
   async createMessage(
@@ -141,12 +160,15 @@ export class ChatRepository {
     attachments?: { cloudinaryPublicId: string; secureUrl: string; fileType: FileType; fileName?: string; fileSize?: number }[],
     replyToId?: string
   ): Promise<any> {
+    const rawTrimmed = text && text.trim() ? text.trim() : null;
+    const encryptedText = rawTrimmed ? (encryptMessage(rawTrimmed) ?? rawTrimmed) : null;
+
     return prisma.$transaction(async (tx) => {
       const message = await tx.message.create({
         data: {
           conversationId,
           senderId,
-          text: text && text.trim() ? text.trim() : null,
+          text: encryptedText,
           replyToId: replyToId || null,
           attachments: attachments
             ? {
@@ -196,19 +218,20 @@ export class ChatRepository {
         data: { lastReadAt: new Date() },
       });
 
-      return message;
+      return this.decryptMessageRecord(message);
     });
   }
 
   async findMessageById(id: string): Promise<Message | null> {
-    return prisma.message.findUnique({
+    const message = await prisma.message.findUnique({
       where: { id },
     });
+    return this.decryptMessageRecord(message);
   }
 
   async findMessagesByConversation(conversationId: string, limit = 50, page = 1): Promise<any[]> {
     const skip = (page - 1) * limit;
-    return prisma.message.findMany({
+    const messages = await prisma.message.findMany({
       where: { conversationId },
       include: {
         attachments: true,
@@ -232,17 +255,24 @@ export class ChatRepository {
       take: limit,
       skip,
     });
+
+    return messages.map((m) => this.decryptMessageRecord(m));
   }
 
   async editMessage(messageId: string, text: string): Promise<Message> {
-    return prisma.message.update({
+    const rawTrimmed = text.trim();
+    const encryptedText = encryptMessage(rawTrimmed) ?? rawTrimmed;
+
+    const message = await prisma.message.update({
       where: { id: messageId },
       data: {
-        text,
+        text: encryptedText,
         isEdited: true,
         updatedAt: new Date(),
       },
     });
+
+    return this.decryptMessageRecord(message) as Message;
   }
 
   async updateLastRead(conversationId: string, userId: string): Promise<ConversationParticipant> {

@@ -18,18 +18,18 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
-prisma.$on('query', (e) => {
+(prisma as any).$on('query', (e: any) => {
   logger.debug(`Query: ${e.query} | Params: ${e.params} | Duration: ${e.duration}ms`);
 });
 
-prisma.$on('error', (e) => {
+(prisma as any).$on('error', (e: any) => {
   logger.error(`Prisma Error: ${e.message}`);
 });
 
-prisma.$on('warn', (e) => {
+(prisma as any).$on('warn', (e: any) => {
   logger.warn(`Prisma Warning: ${e.message}`);
 });
 
-prisma.$on('info', (e) => {
+(prisma as any).$on('info', (e: any) => {
   logger.info(`Prisma Info: ${e.message}`);
 });

@@ -3,6 +3,7 @@ import { NotificationType, RewindLetterStatus } from '@prisma/client';
 import { io } from '../socket';
 import { logger } from '../utils/logger';
 import { PushService } from './push.service';
+import { encryptMessage, decryptMessage } from '../utils/crypto';
 import {
   REWIND_LETTER_DEFAULT_DELIVERY_DAYS,
   REWIND_LETTER_MIN_DELIVERY_DAYS,
@@ -60,11 +61,14 @@ export class RewindLetterService {
     const deliverAfter = new Date();
     deliverAfter.setDate(deliverAfter.getDate() + days);
 
+    const rawContent = content.trim();
+    const encryptedContent = encryptMessage(rawContent) ?? rawContent;
+
     const letter = await prisma.rewindLetter.create({
       data: {
         matchId,
         authorId,
-        content: content.trim(),
+        content: encryptedContent,
         deliverAfter,
         status: RewindLetterStatus.SEALED,
       },
@@ -201,10 +205,13 @@ export class RewindLetterService {
       deliverAfter.setDate(deliverAfter.getDate() + days);
     }
 
+    const rawContent = content.trim();
+    const encryptedContent = encryptMessage(rawContent) ?? rawContent;
+
     const updated = await prisma.rewindLetter.update({
       where: { id: letter.id },
       data: {
-        content: content.trim(),
+        content: encryptedContent,
         deliverAfter,
       },
     });
@@ -219,7 +226,7 @@ export class RewindLetterService {
     return {
       id: updated.id,
       matchId: updated.matchId,
-      content: updated.content,
+      content: decryptMessage(updated.content) ?? updated.content,
       deliverAfter: updated.deliverAfter,
       status: updated.status,
     };
@@ -335,18 +342,26 @@ export class RewindLetterService {
       },
     });
 
-    // Sanitize received letters: only DELIVERED letters have readable content
+    // Decrypt content for author's sent letters
+    const decryptedSentLetters = sentLetters.map((l) => ({
+      ...l,
+      content: l.content ? (decryptMessage(l.content) ?? l.content) : l.content,
+    }));
+
+    // Sanitize received letters: only DELIVERED letters have readable content (decrypted)
     const receivedLetters = rawReceivedLetters.map((letter) => ({
       id: letter.id,
       status: letter.status,
       createdAt: letter.createdAt,
       deliverAfter: letter.deliverAfter,
       deliveredAt: letter.deliveredAt,
-      content: letter.status === RewindLetterStatus.DELIVERED ? letter.content : null,
+      content: letter.status === RewindLetterStatus.DELIVERED && letter.content
+        ? (decryptMessage(letter.content) ?? letter.content)
+        : null,
     }));
 
     // Most relevant active letters
-    const myLetter = sentLetters.find((l) => l.status === RewindLetterStatus.SEALED) || sentLetters[0] || null;
+    const myLetter = decryptedSentLetters.find((l) => l.status === RewindLetterStatus.SEALED) || decryptedSentLetters[0] || null;
     const receivedLetter = receivedLetters.find((l) => l.status === RewindLetterStatus.SEALED)
       || receivedLetters.find((l) => l.status === RewindLetterStatus.DELIVERED)
       || receivedLetters[0]
@@ -355,7 +370,7 @@ export class RewindLetterService {
     return {
       myLetter,
       receivedLetter,
-      sentLetters,
+      sentLetters: decryptedSentLetters,
       receivedLetters,
     };
   }
@@ -385,7 +400,7 @@ export class RewindLetterService {
 
     return {
       id: letter.id,
-      content: letter.content,
+      content: letter.content ? (decryptMessage(letter.content) ?? letter.content) : letter.content,
       authorName: authorProfile?.name || 'Your match',
       deliveredAt: letter.deliveredAt,
       createdAt: letter.createdAt,
