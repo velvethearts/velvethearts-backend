@@ -75,11 +75,13 @@ export class RewindLetterController {
         return res.status(400).json({ success: false, message: result.error.errors[0].message });
       }
 
+      const letterId = (req.query.letterId as string) || req.body?.letterId;
       const data = await this.rewindLetterService.editLetterContent(
         req.user.userId,
         matchId,
         result.data.content,
-        result.data.deliveryDays
+        result.data.deliveryDays,
+        letterId
       );
 
       return res.status(200).json({
@@ -112,10 +114,12 @@ export class RewindLetterController {
         return res.status(400).json({ success: false, message: result.error.errors[0].message });
       }
 
+      const letterId = (req.query.letterId as string) || req.body?.letterId;
       const data = await this.rewindLetterService.updateDeliverySchedule(
         req.user.userId,
         matchId,
-        result.data.deliveryDays
+        result.data.deliveryDays,
+        letterId
       );
 
       return res.status(200).json({
@@ -143,9 +147,11 @@ export class RewindLetterController {
         return res.status(400).json({ success: false, message: 'Match ID is required' });
       }
 
+      const letterId = (req.query.letterId as string) || req.body?.letterId;
       const data = await this.rewindLetterService.deleteLetter(
         req.user.userId,
-        matchId
+        matchId,
+        letterId
       );
 
       return res.status(200).json(data);

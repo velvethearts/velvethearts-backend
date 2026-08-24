@@ -16,7 +16,7 @@ export class RewindLetterService {
 
   /**
    * Write (seal) a rewind letter for a match.
-   * One letter per user per match. Author cannot be the same as recipient.
+   * Allowed if user doesn't already have an active SEALED letter for this match.
    */
   async writeLetter(authorId: string, matchId: string, content: string, deliveryDays?: number) {
     if (!content || content.trim().length === 0) {
@@ -39,16 +39,17 @@ export class RewindLetterService {
       throw new Error('You are not part of this match');
     }
 
-    // Check author hasn't already written a letter for this match
-    const existing = await prisma.rewindLetter.findUnique({
-      where: { matchId_authorId: { matchId, authorId } },
+    // Check author doesn't already have an active SEALED letter for this match
+    const existingSealed = await prisma.rewindLetter.findFirst({
+      where: { matchId, authorId, status: RewindLetterStatus.SEALED },
     });
-    if (existing) {
-      throw new Error('You have already written a letter for this match');
+    if (existingSealed) {
+      throw new Error('You already have a sealed letter waiting for delivery in this chat');
     }
 
-    // Compute deliverAfter: match createdAt + days
-    const deliverAfter = new Date(match.createdAt);
+    // Compute deliverAfter: match createdAt + days (or now + days if later)
+    const baseDate = new Date(match.createdAt);
+    const deliverAfter = new Date(baseDate);
     deliverAfter.setDate(deliverAfter.getDate() + days);
 
     const letter = await prisma.rewindLetter.create({
@@ -82,8 +83,8 @@ export class RewindLetterService {
 
       if (io) {
         io.to(authorId).emit('notification', { notification: notif });
-        // Real-time notification to partner that a letter has been sealed for them
-        io.to(partnerId).emit('rewind_letter_sealed', { matchId, authorId });
+        io.to(authorId).emit('rewind_letter_sealed', { matchId, letterId: letter.id, isAuthor: true });
+        io.to(partnerId).emit('rewind_letter_sealed', { matchId, letterId: letter.id, isAuthor: false });
       }
     } catch (e) {
       logger.warn('[RewindLetter] Failed to create sealed notification:', e);
@@ -94,6 +95,7 @@ export class RewindLetterService {
       id: letter.id,
       matchId: letter.matchId,
       status: letter.status,
+      content: letter.content,
       deliverAfter: letter.deliverAfter,
       createdAt: letter.createdAt,
     };
@@ -102,11 +104,10 @@ export class RewindLetterService {
   /**
    * Edit letter content (and optionally delivery timeframe) within the 48-hour window.
    */
-  async editLetterContent(authorId: string, matchId: string, content: string, deliveryDays?: number) {
-    const letter = await prisma.rewindLetter.findUnique({
-      where: { matchId_authorId: { matchId, authorId } },
-      include: { match: true },
-    });
+  async editLetterContent(authorId: string, matchId: string, content: string, deliveryDays?: number, letterId?: string) {
+    const letter = letterId
+      ? await prisma.rewindLetter.findFirst({ where: { id: letterId, authorId, matchId }, include: { match: true } })
+      : await prisma.rewindLetter.findFirst({ where: { matchId, authorId, status: RewindLetterStatus.SEALED }, include: { match: true } });
 
     if (!letter) {
       throw new Error('Letter not found');
@@ -144,8 +145,8 @@ export class RewindLetterService {
 
     const partnerId = letter.match.user1Id === authorId ? letter.match.user2Id : letter.match.user1Id;
     if (io) {
-      io.to(authorId).emit('rewind_letter_updated', { matchId, isAuthor: true });
-      io.to(partnerId).emit('rewind_letter_updated', { matchId, isAuthor: false });
+      io.to(authorId).emit('rewind_letter_updated', { matchId, letterId: updated.id, isAuthor: true });
+      io.to(partnerId).emit('rewind_letter_updated', { matchId, letterId: updated.id, isAuthor: false });
     }
 
     logger.info(`[RewindLetter] Letter ${letter.id} edited by author ${authorId}`);
@@ -162,15 +163,14 @@ export class RewindLetterService {
    * Reschedule delivery time for an already sealed letter.
    * Allowed only while letter is in SEALED state.
    */
-  async updateDeliverySchedule(authorId: string, matchId: string, deliveryDays: number) {
+  async updateDeliverySchedule(authorId: string, matchId: string, deliveryDays: number, letterId?: string) {
     if (!Number.isInteger(deliveryDays) || deliveryDays < REWIND_LETTER_MIN_DELIVERY_DAYS || deliveryDays > REWIND_LETTER_MAX_DELIVERY_DAYS) {
       throw new Error(`Unlock duration must be between ${REWIND_LETTER_MIN_DELIVERY_DAYS} and ${REWIND_LETTER_MAX_DELIVERY_DAYS} days`);
     }
 
-    const letter = await prisma.rewindLetter.findUnique({
-      where: { matchId_authorId: { matchId, authorId } },
-      include: { match: true },
-    });
+    const letter = letterId
+      ? await prisma.rewindLetter.findFirst({ where: { id: letterId, authorId, matchId }, include: { match: true } })
+      : await prisma.rewindLetter.findFirst({ where: { matchId, authorId, status: RewindLetterStatus.SEALED }, include: { match: true } });
 
     if (!letter) {
       throw new Error('Letter not found');
@@ -189,8 +189,8 @@ export class RewindLetterService {
 
     const partnerId = letter.match.user1Id === authorId ? letter.match.user2Id : letter.match.user1Id;
     if (io) {
-      io.to(authorId).emit('rewind_letter_updated', { matchId, isAuthor: true });
-      io.to(partnerId).emit('rewind_letter_updated', { matchId, isAuthor: false });
+      io.to(authorId).emit('rewind_letter_updated', { matchId, letterId: updated.id, isAuthor: true });
+      io.to(partnerId).emit('rewind_letter_updated', { matchId, letterId: updated.id, isAuthor: false });
     }
 
     logger.info(`[RewindLetter] Delivery rescheduled for letter ${letter.id} to ${deliverAfter.toISOString()}`);
@@ -203,13 +203,12 @@ export class RewindLetterService {
   }
 
   /**
-   * Delete / unsend a sealed letter before it delivers.
+   * Delete / unsend a letter (either by specific letter ID or active sealed letter).
    */
-  async deleteLetter(authorId: string, matchId: string) {
-    const letter = await prisma.rewindLetter.findUnique({
-      where: { matchId_authorId: { matchId, authorId } },
-      include: { match: true },
-    });
+  async deleteLetter(authorId: string, matchId: string, letterId?: string) {
+    const letter = letterId
+      ? await prisma.rewindLetter.findFirst({ where: { id: letterId, authorId, matchId }, include: { match: true } })
+      : await prisma.rewindLetter.findFirst({ where: { matchId, authorId }, orderBy: { createdAt: 'desc' }, include: { match: true } });
 
     if (!letter) {
       throw new Error('Letter not found');
@@ -221,8 +220,8 @@ export class RewindLetterService {
 
     const partnerId = letter.match.user1Id === authorId ? letter.match.user2Id : letter.match.user1Id;
     if (io) {
-      io.to(authorId).emit('rewind_letter_deleted', { matchId, isAuthor: true });
-      io.to(partnerId).emit('rewind_letter_deleted', { matchId, isAuthor: false });
+      io.to(authorId).emit('rewind_letter_deleted', { matchId, letterId: letter.id, isAuthor: true });
+      io.to(partnerId).emit('rewind_letter_deleted', { matchId, letterId: letter.id, isAuthor: false });
     }
 
     logger.info(`[RewindLetter] Letter ${letter.id} deleted by author ${authorId}`);
@@ -230,8 +229,8 @@ export class RewindLetterService {
   }
 
   /**
-   * Get the status of a rewind letter for a match visible to the requesting user.
-   * Returns exists/sealed/delivered — author can always re-read their own written letter.
+   * Get the status and full history of rewind letters for a match.
+   * Returns all sent letters and all received letters (sanitizing content for sealed letters).
    */
   async getLetterStatus(userId: string, matchId: string) {
     const match = await prisma.match.findUnique({ where: { id: matchId } });
@@ -240,43 +239,60 @@ export class RewindLetterService {
       throw new Error('You are not part of this match');
     }
 
-    // Letter written BY this user
-    const myLetter = await prisma.rewindLetter.findUnique({
-      where: { matchId_authorId: { matchId, authorId: userId } },
-      select: { id: true, status: true, content: true, createdAt: true, deliverAfter: true, deliveredAt: true },
+    const partnerId = match.user1Id === userId ? match.user2Id : match.user1Id;
+
+    // All letters written BY this user (sent tab history)
+    const sentLetters = await prisma.rewindLetter.findMany({
+      where: { matchId, authorId: userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        content: true,
+        createdAt: true,
+        deliverAfter: true,
+        deliveredAt: true,
+      },
     });
 
-    // Letter written FOR this user (by the other person)
-    const partnerId = match.user1Id === userId ? match.user2Id : match.user1Id;
-    const partnerLetter = await prisma.rewindLetter.findUnique({
-      where: { matchId_authorId: { matchId, authorId: partnerId } },
-      select: { id: true, status: true, deliverAfter: true, deliveredAt: true },
+    // All letters written BY partner for this user (received tab history)
+    const rawReceivedLetters = await prisma.rewindLetter.findMany({
+      where: { matchId, authorId: partnerId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        content: true,
+        createdAt: true,
+        deliverAfter: true,
+        deliveredAt: true,
+      },
     });
+
+    // Sanitize received letters: only DELIVERED letters have readable content
+    const receivedLetters = rawReceivedLetters.map((letter) => ({
+      id: letter.id,
+      status: letter.status,
+      createdAt: letter.createdAt,
+      deliverAfter: letter.deliverAfter,
+      deliveredAt: letter.deliveredAt,
+      content: letter.status === RewindLetterStatus.DELIVERED ? letter.content : null,
+    }));
+
+    // Most relevant active letters
+    const myLetter = sentLetters.find((l) => l.status === RewindLetterStatus.SEALED) || sentLetters[0] || null;
+    const receivedLetter = receivedLetters.find((l) => l.status === RewindLetterStatus.DELIVERED) || receivedLetters[0] || null;
 
     return {
-      myLetter: myLetter
-        ? {
-            id: myLetter.id,
-            status: myLetter.status,
-            createdAt: myLetter.createdAt,
-            deliverAfter: myLetter.deliverAfter,
-            deliveredAt: myLetter.deliveredAt,
-            content: myLetter.content,
-          }
-        : null,
-      receivedLetter: partnerLetter
-        ? {
-            id: partnerLetter.id,
-            status: partnerLetter.status,
-            deliverAfter: partnerLetter.deliverAfter,
-            deliveredAt: partnerLetter.deliveredAt,
-          }
-        : null,
+      myLetter,
+      receivedLetter,
+      sentLetters,
+      receivedLetters,
     };
   }
 
   /**
-   * Get the content of a delivered letter. Only the recipient can read it.
+   * Get the content of the most recently delivered letter from partner.
    */
   async getDeliveredLetter(userId: string, matchId: string) {
     const match = await prisma.match.findUnique({ where: { id: matchId } });
@@ -286,16 +302,13 @@ export class RewindLetterService {
     }
 
     const partnerId = match.user1Id === userId ? match.user2Id : match.user1Id;
-    const letter = await prisma.rewindLetter.findUnique({
-      where: { matchId_authorId: { matchId, authorId: partnerId } },
+    const letter = await prisma.rewindLetter.findFirst({
+      where: { matchId, authorId: partnerId, status: RewindLetterStatus.DELIVERED },
+      orderBy: { deliveredAt: 'desc' },
     });
 
-    if (!letter) throw new Error('No letter found for this match');
-    if (letter.status !== RewindLetterStatus.DELIVERED) {
-      throw new Error('This letter has not been delivered yet');
-    }
+    if (!letter) throw new Error('No delivered letter found for this match');
 
-    // Fetch author profile name for display
     const authorProfile = await prisma.profile.findUnique({
       where: { userId: partnerId },
       select: { name: true },
@@ -326,7 +339,6 @@ export class RewindLetterService {
   async sweepAndDeliverLetters() {
     const now = new Date();
 
-    // Time-based delivery: sealed letters past their deliverAfter deadline
     const timeReady = await prisma.rewindLetter.findMany({
       where: {
         status: RewindLetterStatus.SEALED,
@@ -339,7 +351,6 @@ export class RewindLetterService {
 
     for (const letter of timeReady) {
       try {
-        // Mark as delivered
         await prisma.rewindLetter.update({
           where: { id: letter.id },
           data: {
@@ -348,7 +359,6 @@ export class RewindLetterService {
           },
         });
 
-        // Determine recipient and author info
         const recipientId = letter.match.user1Id === letter.authorId
           ? letter.match.user2Id
           : letter.match.user1Id;
@@ -363,7 +373,6 @@ export class RewindLetterService {
           select: { name: true },
         });
 
-        // 1. Create Recipient Notification
         const recipientNotif = await prisma.notification.create({
           data: {
             userId: recipientId,
@@ -374,7 +383,6 @@ export class RewindLetterService {
           },
         });
 
-        // 2. Create Author Notification
         const authorNotif = await prisma.notification.create({
           data: {
             userId: letter.authorId,
@@ -385,9 +393,7 @@ export class RewindLetterService {
           },
         });
 
-        // 3. Emit real-time socket events
         if (io) {
-          // Notify Recipient
           io.to(recipientId).emit('rewind_letter_delivered', {
             matchId: letter.matchId,
             letterId: letter.id,
@@ -398,7 +404,6 @@ export class RewindLetterService {
             notification: recipientNotif,
           });
 
-          // Notify Author
           io.to(letter.authorId).emit('rewind_letter_delivered', {
             matchId: letter.matchId,
             letterId: letter.id,
@@ -410,7 +415,6 @@ export class RewindLetterService {
           });
         }
 
-        // 4. Send Web Push Notifications
         this.pushService.sendPushNotification(recipientId, {
           title: 'A letter arrives ✉️',
           body: `${authorProfile?.name || 'Your match'} wrote you a Rewind Letter when you first connected.`,
