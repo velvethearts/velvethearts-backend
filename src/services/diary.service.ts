@@ -38,7 +38,10 @@ export class DiaryService {
 
     const entries = await (prisma as any).diaryEntry.findMany({
       where: { matchId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [
+        { createdAt: 'asc' },
+        { id: 'asc' },
+      ],
       include: {
         savedBy: {
           select: {
