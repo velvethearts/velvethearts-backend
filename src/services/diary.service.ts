@@ -79,39 +79,51 @@ export class DiaryService {
   /**
    * Save a chat message to Our Diary.
    */
-  async saveMessage(userId: string, matchId: string, messageId: string, caption?: string) {
+  async saveMessage(
+    userId: string,
+    matchId: string,
+    messageId?: string,
+    caption?: string,
+    fallbackData?: { text?: string; attachmentUrl?: string; sourceType?: string }
+  ) {
     const { match } = await this.verifyMatchParticipant(userId, matchId);
 
-    // Fetch the message with its attachments and conversation
-    const message = await prisma.message.findUnique({
-      where: { id: messageId },
-      include: { attachments: true, conversation: true },
-    });
-
-    if (!message) {
-      throw new Error('Message not found');
-    }
-
-    if (message.conversation?.matchId !== matchId) {
-      throw new Error('Message does not belong to this conversation');
+    // Fetch the message with its attachments and conversation if messageId exists
+    let message = null;
+    if (messageId) {
+      try {
+        message = await prisma.message.findUnique({
+          where: { id: messageId },
+          include: { attachments: true, conversation: true },
+        });
+      } catch (_) {}
     }
 
     let sourceType: 'MESSAGE' | 'VOICE_NOTE' | 'IMAGE' = 'MESSAGE';
-    let content: string | null = message.text ? (decryptMessage(message.text) ?? null) : null;
+    let content: string | null = null;
     let attachmentUrl: string | null = null;
     let attachmentPublicId: string | null = null;
 
-    if (message.attachments && message.attachments.length > 0) {
-      const firstAtt = message.attachments[0];
-      if (firstAtt.fileType === 'AUDIO' || firstAtt.secureUrl?.includes('voice-note')) {
-        sourceType = 'VOICE_NOTE';
-        attachmentUrl = firstAtt.secureUrl;
-        attachmentPublicId = firstAtt.cloudinaryPublicId || null;
-      } else if (firstAtt.fileType === 'IMAGE') {
-        sourceType = 'IMAGE';
-        attachmentUrl = firstAtt.secureUrl;
-        attachmentPublicId = firstAtt.cloudinaryPublicId || null;
+    if (message) {
+      content = message.text ? (decryptMessage(message.text) ?? null) : null;
+      if (message.attachments && message.attachments.length > 0) {
+        const firstAtt = message.attachments[0];
+        if (firstAtt.fileType === 'AUDIO' || firstAtt.secureUrl?.includes('voice-note')) {
+          sourceType = 'VOICE_NOTE';
+          attachmentUrl = firstAtt.secureUrl;
+          attachmentPublicId = firstAtt.cloudinaryPublicId || null;
+        } else if (firstAtt.fileType === 'IMAGE') {
+          sourceType = 'IMAGE';
+          attachmentUrl = firstAtt.secureUrl;
+          attachmentPublicId = firstAtt.cloudinaryPublicId || null;
+        }
       }
+    } else if (fallbackData?.text || fallbackData?.attachmentUrl) {
+      content = fallbackData.text || null;
+      attachmentUrl = fallbackData.attachmentUrl || null;
+      sourceType = (fallbackData.sourceType as any) || (attachmentUrl?.includes('voice') ? 'VOICE_NOTE' : 'MESSAGE');
+    } else {
+      throw new Error('Message not found');
     }
 
     // Debounce duplicate saves (within 15s window)

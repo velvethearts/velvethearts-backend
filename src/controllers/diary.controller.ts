@@ -5,8 +5,11 @@ import { logger } from '../utils/logger';
 import { z } from 'zod';
 
 const saveMessageSchema = z.object({
-  messageId: z.string().uuid('Invalid message ID'),
+  messageId: z.string().min(1, 'Message ID is required').optional().nullable(),
+  text: z.string().max(2000).optional().nullable(),
   caption: z.string().max(500, 'Caption cannot exceed 500 characters').optional().nullable(),
+  attachmentUrl: z.string().optional().nullable(),
+  sourceType: z.enum(['MESSAGE', 'VOICE_NOTE', 'NOTE', 'IMAGE']).optional().nullable(),
 });
 
 const addNoteSchema = z.object({
@@ -58,8 +61,13 @@ export class DiaryController {
       const entry = await this.diaryService.saveMessage(
         req.user.userId,
         matchId,
-        parseResult.data.messageId,
-        parseResult.data.caption || undefined
+        parseResult.data.messageId || undefined,
+        parseResult.data.caption || undefined,
+        {
+          text: parseResult.data.text || undefined,
+          attachmentUrl: parseResult.data.attachmentUrl || undefined,
+          sourceType: (parseResult.data.sourceType as any) || undefined,
+        }
       );
 
       return res.status(201).json({ success: true, data: entry });
