@@ -9,8 +9,8 @@ export const REWIND_LETTER_DELIVERY_DAYS = 7;
 export const REWIND_LETTER_MIN_DELIVERY_DAYS = 7;
 export const REWIND_LETTER_MAX_DELIVERY_DAYS = 90;
 
-/** Number of messages exchanged in the conversation before a sealed letter auto-delivers */
-export const REWIND_LETTER_DELIVERY_MESSAGE_COUNT = 50;
+/** Allowed window in hours after writing for the author to edit content (48 hours = 2 days) */
+export const REWIND_LETTER_EDIT_WINDOW_HOURS = 48;
 
 /** Maximum character length for a rewind letter */
 export const REWIND_LETTER_MAX_LENGTH = 500;

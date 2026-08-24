@@ -15,6 +15,11 @@ const writeLetterSchema = z.object({
   deliveryDays: z.number().int().min(REWIND_LETTER_MIN_DELIVERY_DAYS, `Unlock duration must be at least ${REWIND_LETTER_MIN_DELIVERY_DAYS} days`).max(REWIND_LETTER_MAX_DELIVERY_DAYS, `Unlock duration cannot exceed ${REWIND_LETTER_MAX_DELIVERY_DAYS} days`).optional(),
 });
 
+const editLetterSchema = z.object({
+  content: z.string().min(1, 'Letter cannot be empty').max(REWIND_LETTER_MAX_LENGTH, `Letter must be ${REWIND_LETTER_MAX_LENGTH} characters or fewer`),
+  deliveryDays: z.number().int().min(REWIND_LETTER_MIN_DELIVERY_DAYS, `Unlock duration must be at least ${REWIND_LETTER_MIN_DELIVERY_DAYS} days`).max(REWIND_LETTER_MAX_DELIVERY_DAYS, `Unlock duration cannot exceed ${REWIND_LETTER_MAX_DELIVERY_DAYS} days`).optional(),
+});
+
 const updateScheduleSchema = z.object({
   deliveryDays: z.number().int().min(REWIND_LETTER_MIN_DELIVERY_DAYS, `Unlock duration must be at least ${REWIND_LETTER_MIN_DELIVERY_DAYS} days`).max(REWIND_LETTER_MAX_DELIVERY_DAYS, `Unlock duration cannot exceed ${REWIND_LETTER_MAX_DELIVERY_DAYS} days`),
 });
@@ -54,6 +59,43 @@ export class RewindLetterController {
     }
   };
 
+  edit = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { matchId } = req.params;
+      if (!matchId) {
+        return res.status(400).json({ success: false, message: 'Match ID is required' });
+      }
+
+      const result = editLetterSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ success: false, message: result.error.errors[0].message });
+      }
+
+      const data = await this.rewindLetterService.editLetterContent(
+        req.user.userId,
+        matchId,
+        result.data.content,
+        result.data.deliveryDays
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Letter updated successfully',
+        data,
+      });
+    } catch (error: any) {
+      logger.error('Edit rewind letter controller failure:', error);
+      const status = error.message?.includes('not found') ? 404
+        : error.message?.includes('Delivered') || error.message?.includes('within') ? 400
+        : 500;
+      return res.status(status).json({ success: false, message: error.message || 'Editing letter failed' });
+    }
+  };
+
   updateSchedule = async (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!req.user) {
@@ -87,6 +129,32 @@ export class RewindLetterController {
         : error.message?.includes('Only sealed') ? 400
         : 500;
       return res.status(status).json({ success: false, message: error.message || 'Updating schedule failed' });
+    }
+  };
+
+  delete = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { matchId } = req.params;
+      if (!matchId) {
+        return res.status(400).json({ success: false, message: 'Match ID is required' });
+      }
+
+      const data = await this.rewindLetterService.deleteLetter(
+        req.user.userId,
+        matchId
+      );
+
+      return res.status(200).json(data);
+    } catch (error: any) {
+      logger.error('Delete rewind letter controller failure:', error);
+      const status = error.message?.includes('not found') ? 404
+        : error.message?.includes('Delivered') ? 400
+        : 500;
+      return res.status(status).json({ success: false, message: error.message || 'Deleting letter failed' });
     }
   };
 

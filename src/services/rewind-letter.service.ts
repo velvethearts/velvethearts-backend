@@ -7,7 +7,7 @@ import {
   REWIND_LETTER_DEFAULT_DELIVERY_DAYS,
   REWIND_LETTER_MIN_DELIVERY_DAYS,
   REWIND_LETTER_MAX_DELIVERY_DAYS,
-  REWIND_LETTER_DELIVERY_MESSAGE_COUNT,
+  REWIND_LETTER_EDIT_WINDOW_HOURS,
   REWIND_LETTER_MAX_LENGTH,
 } from '../constants/rewind-letter.constants';
 
@@ -100,6 +100,59 @@ export class RewindLetterService {
   }
 
   /**
+   * Edit letter content (and optionally delivery timeframe) within the 48-hour window.
+   */
+  async editLetterContent(authorId: string, matchId: string, content: string, deliveryDays?: number) {
+    const letter = await prisma.rewindLetter.findUnique({
+      where: { matchId_authorId: { matchId, authorId } },
+      include: { match: true },
+    });
+
+    if (!letter) {
+      throw new Error('Letter not found');
+    }
+    if (letter.status !== RewindLetterStatus.SEALED) {
+      throw new Error('Delivered letters cannot be edited');
+    }
+
+    const elapsedHours = (Date.now() - new Date(letter.createdAt).getTime()) / (1000 * 60 * 60);
+    if (elapsedHours > REWIND_LETTER_EDIT_WINDOW_HOURS) {
+      throw new Error(`Letters can only be edited within ${REWIND_LETTER_EDIT_WINDOW_HOURS} hours of sending`);
+    }
+
+    if (!content || content.trim().length === 0) {
+      throw new Error('Letter content cannot be empty');
+    }
+    if (content.length > REWIND_LETTER_MAX_LENGTH) {
+      throw new Error(`Letter must be ${REWIND_LETTER_MAX_LENGTH} characters or fewer`);
+    }
+
+    let deliverAfter = letter.deliverAfter;
+    if (typeof deliveryDays === 'number' && Number.isInteger(deliveryDays)) {
+      const days = Math.max(REWIND_LETTER_MIN_DELIVERY_DAYS, Math.min(REWIND_LETTER_MAX_DELIVERY_DAYS, deliveryDays));
+      deliverAfter = new Date(letter.match.createdAt);
+      deliverAfter.setDate(deliverAfter.getDate() + days);
+    }
+
+    const updated = await prisma.rewindLetter.update({
+      where: { id: letter.id },
+      data: {
+        content: content.trim(),
+        deliverAfter,
+      },
+    });
+
+    logger.info(`[RewindLetter] Letter ${letter.id} edited by author ${authorId}`);
+    return {
+      id: updated.id,
+      matchId: updated.matchId,
+      content: updated.content,
+      deliverAfter: updated.deliverAfter,
+      status: updated.status,
+    };
+  }
+
+  /**
    * Reschedule delivery time for an already sealed letter.
    * Allowed only while letter is in SEALED state.
    */
@@ -138,8 +191,38 @@ export class RewindLetterService {
   }
 
   /**
+   * Delete / unsend a sealed letter before it delivers.
+   */
+  async deleteLetter(authorId: string, matchId: string) {
+    const letter = await prisma.rewindLetter.findUnique({
+      where: { matchId_authorId: { matchId, authorId } },
+      include: { match: true },
+    });
+
+    if (!letter) {
+      throw new Error('Letter not found');
+    }
+    if (letter.status !== RewindLetterStatus.SEALED) {
+      throw new Error('Delivered letters cannot be deleted');
+    }
+
+    await prisma.rewindLetter.delete({
+      where: { id: letter.id },
+    });
+
+    const partnerId = letter.match.user1Id === authorId ? letter.match.user2Id : letter.match.user1Id;
+    if (io) {
+      io.to(authorId).emit('rewind_letter_deleted', { matchId, isAuthor: true });
+      io.to(partnerId).emit('rewind_letter_deleted', { matchId, isAuthor: false });
+    }
+
+    logger.info(`[RewindLetter] Letter ${letter.id} deleted by author ${authorId}`);
+    return { success: true, message: 'Letter deleted successfully' };
+  }
+
+  /**
    * Get the status of a rewind letter for a match visible to the requesting user.
-   * Returns exists/sealed/delivered — never content before delivery.
+   * Returns exists/sealed/delivered — author can always re-read their own written letter.
    */
   async getLetterStatus(userId: string, matchId: string) {
     const match = await prisma.match.findUnique({ where: { id: matchId } });
@@ -229,13 +312,12 @@ export class RewindLetterService {
   }
 
   /**
-   * Scheduled sweep: deliver letters whose time has come or whose
-   * conversation has enough messages.
+   * Scheduled sweep: deliver letters whose deliverAfter deadline has passed.
    */
   async sweepAndDeliverLetters() {
     const now = new Date();
 
-    // 1. Time-based delivery: sealed letters past their deliverAfter deadline
+    // Time-based delivery: sealed letters past their deliverAfter deadline
     const timeReady = await prisma.rewindLetter.findMany({
       where: {
         status: RewindLetterStatus.SEALED,
@@ -244,35 +326,9 @@ export class RewindLetterService {
       include: { match: true },
     });
 
-    // 2. Message-count-based delivery: sealed letters whose conversation
-    //    has >= DELIVERY_MESSAGE_COUNT messages
-    const sealedLetters = await prisma.rewindLetter.findMany({
-      where: {
-        status: RewindLetterStatus.SEALED,
-        deliverAfter: { gt: now }, // not yet time-eligible — check message count
-      },
-      include: {
-        match: {
-          include: { conversation: true },
-        },
-      },
-    });
+    if (timeReady.length === 0) return;
 
-    const messageReady: typeof sealedLetters = [];
-    for (const letter of sealedLetters) {
-      if (!letter.match.conversation) continue;
-      const messageCount = await prisma.message.count({
-        where: { conversationId: letter.match.conversation.id },
-      });
-      if (messageCount >= REWIND_LETTER_DELIVERY_MESSAGE_COUNT) {
-        messageReady.push(letter);
-      }
-    }
-
-    const allReady = [...timeReady, ...messageReady];
-    if (allReady.length === 0) return;
-
-    for (const letter of allReady) {
+    for (const letter of timeReady) {
       try {
         // Mark as delivered
         await prisma.rewindLetter.update({
