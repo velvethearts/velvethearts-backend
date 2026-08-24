@@ -18,6 +18,9 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
+// Ensure database enum values are up to date on connection
+prisma.$executeRawUnsafe(`ALTER TYPE "DiarySourceType" ADD VALUE IF NOT EXISTS 'VIDEO';`).catch(() => {});
+
 (prisma as any).$on('query', (e: any) => {
   logger.debug(`Query: ${e.query} | Params: ${e.params} | Duration: ${e.duration}ms`);
 });

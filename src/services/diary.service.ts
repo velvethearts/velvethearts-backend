@@ -322,12 +322,47 @@ export class DiaryService {
           },
         },
       });
-    } catch (dbErr) {
-      // If DB insert fails, cleanup Cloudinary asset so no orphaned files remain
-      if (uploadResult.publicId) {
-        await this.uploadService.deleteAsset(uploadResult.publicId);
+    } catch (dbErr: any) {
+      if (dbErr?.message?.includes('22P02') || dbErr?.message?.includes('DiarySourceType')) {
+        try {
+          await (prisma as any).$executeRawUnsafe(`ALTER TYPE "DiarySourceType" ADD VALUE IF NOT EXISTS 'VIDEO';`);
+          newEntry = await (prisma as any).diaryEntry.create({
+            data: {
+              matchId,
+              savedByUserId: userId,
+              sourceType: resolvedSourceType,
+              content: null,
+              attachmentUrl: uploadResult.secureUrl,
+              attachmentPublicId: uploadResult.publicId,
+              caption: encryptedCaption,
+            },
+            include: {
+              savedBy: {
+                select: {
+                  id: true,
+                  profile: {
+                    select: {
+                      name: true,
+                      photos: { take: 1, select: { secureUrl: true } },
+                    },
+                  },
+                },
+              },
+            },
+          });
+        } catch (retryErr) {
+          if (uploadResult.publicId) {
+            await this.uploadService.deleteAsset(uploadResult.publicId, resolvedSourceType === 'VIDEO' ? 'video' : 'image');
+          }
+          throw retryErr;
+        }
+      } else {
+        // If DB insert fails, cleanup Cloudinary asset so no orphaned files remain
+        if (uploadResult.publicId) {
+          await this.uploadService.deleteAsset(uploadResult.publicId, resolvedSourceType === 'VIDEO' ? 'video' : 'image');
+        }
+        throw dbErr;
       }
-      throw dbErr;
     }
 
     if (match.conversation?.id) {
