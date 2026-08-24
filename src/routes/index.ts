@@ -80,6 +80,7 @@ router.get('/match/sent-invites', requireAuth, matchCtrl.getSentInvites);
 // REWIND LETTER ROUTES
 // ==========================================
 router.post('/rewind-letter', requireAuth, rewindLetterCtrl.write);
+router.patch('/rewind-letter/:matchId/schedule', requireAuth, rewindLetterCtrl.updateSchedule);
 router.get('/rewind-letter/:matchId/status', requireAuth, rewindLetterCtrl.getStatus);
 router.get('/rewind-letter/:matchId/content', requireAuth, rewindLetterCtrl.getDelivered);
 

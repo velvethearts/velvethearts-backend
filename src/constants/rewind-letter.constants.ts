@@ -1,8 +1,13 @@
 /** Configurable constants for the Rewind Letter feature.
  *  Change these in one place to tune delivery triggers. */
 
-/** Number of days after match creation before a sealed letter auto-delivers */
+/** Default number of days after match creation before a sealed letter auto-delivers */
+export const REWIND_LETTER_DEFAULT_DELIVERY_DAYS = 7;
 export const REWIND_LETTER_DELIVERY_DAYS = 7;
+
+/** Minimum and maximum selectable unlock duration in days */
+export const REWIND_LETTER_MIN_DELIVERY_DAYS = 7;
+export const REWIND_LETTER_MAX_DELIVERY_DAYS = 90;
 
 /** Number of messages exchanged in the conversation before a sealed letter auto-delivers */
 export const REWIND_LETTER_DELIVERY_MESSAGE_COUNT = 50;

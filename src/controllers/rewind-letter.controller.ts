@@ -3,11 +3,20 @@ import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { RewindLetterService } from '../services/rewind-letter.service';
 import { logger } from '../utils/logger';
 import { z } from 'zod';
-import { REWIND_LETTER_MAX_LENGTH } from '../constants/rewind-letter.constants';
+import {
+  REWIND_LETTER_MAX_LENGTH,
+  REWIND_LETTER_MIN_DELIVERY_DAYS,
+  REWIND_LETTER_MAX_DELIVERY_DAYS,
+} from '../constants/rewind-letter.constants';
 
 const writeLetterSchema = z.object({
   matchId: z.string().uuid('Invalid match ID'),
   content: z.string().min(1, 'Letter cannot be empty').max(REWIND_LETTER_MAX_LENGTH, `Letter must be ${REWIND_LETTER_MAX_LENGTH} characters or fewer`),
+  deliveryDays: z.number().int().min(REWIND_LETTER_MIN_DELIVERY_DAYS, `Unlock duration must be at least ${REWIND_LETTER_MIN_DELIVERY_DAYS} days`).max(REWIND_LETTER_MAX_DELIVERY_DAYS, `Unlock duration cannot exceed ${REWIND_LETTER_MAX_DELIVERY_DAYS} days`).optional(),
+});
+
+const updateScheduleSchema = z.object({
+  deliveryDays: z.number().int().min(REWIND_LETTER_MIN_DELIVERY_DAYS, `Unlock duration must be at least ${REWIND_LETTER_MIN_DELIVERY_DAYS} days`).max(REWIND_LETTER_MAX_DELIVERY_DAYS, `Unlock duration cannot exceed ${REWIND_LETTER_MAX_DELIVERY_DAYS} days`),
 });
 
 export class RewindLetterController {
@@ -27,7 +36,8 @@ export class RewindLetterController {
       const data = await this.rewindLetterService.writeLetter(
         req.user.userId,
         result.data.matchId,
-        result.data.content
+        result.data.content,
+        result.data.deliveryDays
       );
 
       return res.status(201).json({
@@ -41,6 +51,42 @@ export class RewindLetterController {
         : error.message?.includes('already written') ? 409
         : 500;
       return res.status(status).json({ success: false, message: error.message || 'Writing letter failed' });
+    }
+  };
+
+  updateSchedule = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { matchId } = req.params;
+      if (!matchId) {
+        return res.status(400).json({ success: false, message: 'Match ID is required' });
+      }
+
+      const result = updateScheduleSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ success: false, message: result.error.errors[0].message });
+      }
+
+      const data = await this.rewindLetterService.updateDeliverySchedule(
+        req.user.userId,
+        matchId,
+        result.data.deliveryDays
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Delivery schedule updated',
+        data,
+      });
+    } catch (error: any) {
+      logger.error('Update rewind letter schedule controller failure:', error);
+      const status = error.message?.includes('not found') ? 404
+        : error.message?.includes('Only sealed') ? 400
+        : 500;
+      return res.status(status).json({ success: false, message: error.message || 'Updating schedule failed' });
     }
   };
 

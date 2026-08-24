@@ -4,7 +4,9 @@ import { io } from '../socket';
 import { logger } from '../utils/logger';
 import { PushService } from './push.service';
 import {
-  REWIND_LETTER_DELIVERY_DAYS,
+  REWIND_LETTER_DEFAULT_DELIVERY_DAYS,
+  REWIND_LETTER_MIN_DELIVERY_DAYS,
+  REWIND_LETTER_MAX_DELIVERY_DAYS,
   REWIND_LETTER_DELIVERY_MESSAGE_COUNT,
   REWIND_LETTER_MAX_LENGTH,
 } from '../constants/rewind-letter.constants';
@@ -16,13 +18,18 @@ export class RewindLetterService {
    * Write (seal) a rewind letter for a match.
    * One letter per user per match. Author cannot be the same as recipient.
    */
-  async writeLetter(authorId: string, matchId: string, content: string) {
+  async writeLetter(authorId: string, matchId: string, content: string, deliveryDays?: number) {
     if (!content || content.trim().length === 0) {
       throw new Error('Letter content cannot be empty');
     }
     if (content.length > REWIND_LETTER_MAX_LENGTH) {
       throw new Error(`Letter must be ${REWIND_LETTER_MAX_LENGTH} characters or fewer`);
     }
+
+    // Validate deliveryDays if supplied
+    const days = (typeof deliveryDays === 'number' && Number.isInteger(deliveryDays))
+      ? Math.max(REWIND_LETTER_MIN_DELIVERY_DAYS, Math.min(REWIND_LETTER_MAX_DELIVERY_DAYS, deliveryDays))
+      : REWIND_LETTER_DEFAULT_DELIVERY_DAYS;
 
     // Verify match exists, is active, and author is a participant
     const match = await prisma.match.findUnique({ where: { id: matchId } });
@@ -40,9 +47,9 @@ export class RewindLetterService {
       throw new Error('You have already written a letter for this match');
     }
 
-    // Compute deliverAfter: match createdAt + DELIVERY_DAYS
+    // Compute deliverAfter: match createdAt + days
     const deliverAfter = new Date(match.createdAt);
-    deliverAfter.setDate(deliverAfter.getDate() + REWIND_LETTER_DELIVERY_DAYS);
+    deliverAfter.setDate(deliverAfter.getDate() + days);
 
     const letter = await prisma.rewindLetter.create({
       data: {
@@ -82,12 +89,51 @@ export class RewindLetterService {
       logger.warn('[RewindLetter] Failed to create sealed notification:', e);
     }
 
-    logger.info(`[RewindLetter] Letter sealed by ${authorId} for match ${matchId}`);
+    logger.info(`[RewindLetter] Letter sealed by ${authorId} for match ${matchId} (unlock in ${days} days)`);
     return {
       id: letter.id,
       matchId: letter.matchId,
       status: letter.status,
+      deliverAfter: letter.deliverAfter,
       createdAt: letter.createdAt,
+    };
+  }
+
+  /**
+   * Reschedule delivery time for an already sealed letter.
+   * Allowed only while letter is in SEALED state.
+   */
+  async updateDeliverySchedule(authorId: string, matchId: string, deliveryDays: number) {
+    if (!Number.isInteger(deliveryDays) || deliveryDays < REWIND_LETTER_MIN_DELIVERY_DAYS || deliveryDays > REWIND_LETTER_MAX_DELIVERY_DAYS) {
+      throw new Error(`Unlock duration must be between ${REWIND_LETTER_MIN_DELIVERY_DAYS} and ${REWIND_LETTER_MAX_DELIVERY_DAYS} days`);
+    }
+
+    const letter = await prisma.rewindLetter.findUnique({
+      where: { matchId_authorId: { matchId, authorId } },
+      include: { match: true },
+    });
+
+    if (!letter) {
+      throw new Error('Letter not found');
+    }
+    if (letter.status !== RewindLetterStatus.SEALED) {
+      throw new Error('Only sealed letters can be rescheduled');
+    }
+
+    const deliverAfter = new Date(letter.match.createdAt);
+    deliverAfter.setDate(deliverAfter.getDate() + deliveryDays);
+
+    const updated = await prisma.rewindLetter.update({
+      where: { id: letter.id },
+      data: { deliverAfter },
+    });
+
+    logger.info(`[RewindLetter] Delivery rescheduled for letter ${letter.id} to ${deliverAfter.toISOString()}`);
+    return {
+      id: updated.id,
+      matchId: updated.matchId,
+      deliverAfter: updated.deliverAfter,
+      status: updated.status,
     };
   }
 
@@ -105,14 +151,14 @@ export class RewindLetterService {
     // Letter written BY this user
     const myLetter = await prisma.rewindLetter.findUnique({
       where: { matchId_authorId: { matchId, authorId: userId } },
-      select: { id: true, status: true, content: true, createdAt: true, deliveredAt: true },
+      select: { id: true, status: true, content: true, createdAt: true, deliverAfter: true, deliveredAt: true },
     });
 
     // Letter written FOR this user (by the other person)
     const partnerId = match.user1Id === userId ? match.user2Id : match.user1Id;
     const partnerLetter = await prisma.rewindLetter.findUnique({
       where: { matchId_authorId: { matchId, authorId: partnerId } },
-      select: { id: true, status: true, deliveredAt: true },
+      select: { id: true, status: true, deliverAfter: true, deliveredAt: true },
     });
 
     return {
@@ -121,12 +167,18 @@ export class RewindLetterService {
             id: myLetter.id,
             status: myLetter.status,
             createdAt: myLetter.createdAt,
+            deliverAfter: myLetter.deliverAfter,
             deliveredAt: myLetter.deliveredAt,
             content: myLetter.status === RewindLetterStatus.DELIVERED ? myLetter.content : undefined,
           }
         : null,
       receivedLetter: partnerLetter
-        ? { id: partnerLetter.id, status: partnerLetter.status, deliveredAt: partnerLetter.deliveredAt }
+        ? {
+            id: partnerLetter.id,
+            status: partnerLetter.status,
+            deliverAfter: partnerLetter.deliverAfter,
+            deliveredAt: partnerLetter.deliveredAt,
+          }
         : null,
     };
   }
