@@ -9,7 +9,7 @@ const saveMessageSchema = z.object({
   text: z.string().max(2000).optional().nullable(),
   caption: z.string().max(500, 'Caption cannot exceed 500 characters').optional().nullable(),
   attachmentUrl: z.string().optional().nullable(),
-  sourceType: z.enum(['MESSAGE', 'VOICE_NOTE', 'NOTE', 'IMAGE']).optional().nullable(),
+  sourceType: z.enum(['MESSAGE', 'VOICE_NOTE', 'NOTE', 'IMAGE', 'VIDEO']).optional().nullable(),
 });
 
 const addNoteSchema = z.object({

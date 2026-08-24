@@ -99,7 +99,7 @@ export class DiaryService {
       } catch (_) {}
     }
 
-    let sourceType: 'MESSAGE' | 'VOICE_NOTE' | 'IMAGE' = 'MESSAGE';
+    let sourceType: 'MESSAGE' | 'VOICE_NOTE' | 'IMAGE' | 'VIDEO' = 'MESSAGE';
     let content: string | null = null;
     let attachmentUrl: string | null = null;
     let attachmentPublicId: string | null = null;
@@ -112,6 +112,10 @@ export class DiaryService {
           sourceType = 'VOICE_NOTE';
           attachmentUrl = firstAtt.secureUrl;
           attachmentPublicId = firstAtt.cloudinaryPublicId || null;
+        } else if (firstAtt.fileType === 'VIDEO' || firstAtt.secureUrl?.match(/\.(mp4|mov|webm|mkv|m4v)/i)) {
+          sourceType = 'VIDEO';
+          attachmentUrl = firstAtt.secureUrl;
+          attachmentPublicId = firstAtt.cloudinaryPublicId || null;
         } else if (firstAtt.fileType === 'IMAGE') {
           sourceType = 'IMAGE';
           attachmentUrl = firstAtt.secureUrl;
@@ -121,7 +125,7 @@ export class DiaryService {
     } else if (fallbackData?.text || fallbackData?.attachmentUrl) {
       content = fallbackData.text || null;
       attachmentUrl = fallbackData.attachmentUrl || null;
-      sourceType = (fallbackData.sourceType as any) || (attachmentUrl?.includes('voice') ? 'VOICE_NOTE' : 'MESSAGE');
+      sourceType = (fallbackData.sourceType as any) || (attachmentUrl?.includes('voice') ? 'VOICE_NOTE' : (attachmentUrl?.match(/\.(mp4|mov|webm|mkv|m4v)/i) ? 'VIDEO' : 'MESSAGE'));
     } else {
       throw new Error('Message not found');
     }
@@ -224,16 +228,13 @@ export class DiaryService {
    * Add a standalone freeform note to Our Diary.
    */
   async addNote(userId: string, matchId: string, text: string, caption?: string) {
-    if (!text || text.trim().length === 0) {
-      throw new Error('Note content cannot be empty');
-    }
-    if (text.length > 2000) {
-      throw new Error('Note exceeds maximum length of 2000 characters');
-    }
-
     const { match } = await this.verifyMatchParticipant(userId, matchId);
 
-    const encryptedContent = (encryptMessage(text.trim()) ?? null);
+    if (!text || !text.trim()) {
+      throw new Error('Note content cannot be empty');
+    }
+
+    const encryptedContent = encryptMessage(text.trim()) ?? text.trim();
     const encryptedCaption = caption?.trim() ? (encryptMessage(caption.trim()) ?? null) : null;
 
     const newEntry = await (prisma as any).diaryEntry.create({
@@ -284,7 +285,7 @@ export class DiaryService {
   }
 
   /**
-   * Upload a photo to Our Diary (moderated via AWS Rekognition via UploadService).
+   * Upload a photo or video to Our Diary (moderated via AWS Rekognition via UploadService).
    */
   async uploadPhoto(userId: string, matchId: string, fileBuffer: Buffer, mimeType: string, caption?: string) {
     const { match } = await this.verifyMatchParticipant(userId, matchId);
@@ -293,6 +294,7 @@ export class DiaryService {
     const uploadResult = await this.uploadService.uploadImage(fileBuffer, 'velvet_hearts/diary', mimeType);
 
     const encryptedCaption = caption?.trim() ? (encryptMessage(caption.trim()) ?? null) : null;
+    const resolvedSourceType = mimeType?.startsWith('video/') ? 'VIDEO' : 'IMAGE';
 
     let newEntry;
     try {
@@ -300,7 +302,7 @@ export class DiaryService {
         data: {
           matchId,
           savedByUserId: userId,
-          sourceType: 'IMAGE',
+          sourceType: resolvedSourceType,
           content: null,
           attachmentUrl: uploadResult.secureUrl,
           attachmentPublicId: uploadResult.publicId,

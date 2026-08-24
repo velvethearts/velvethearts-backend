@@ -374,6 +374,7 @@ enum DiarySourceType {
   VOICE_NOTE
   NOTE
   IMAGE
+  VIDEO
 }
 
 model DiaryEntry {

@@ -14,10 +14,13 @@ export class UploadService {
     if (env.CLOUDINARY_API_KEY === '123456789012345' || !env.CLOUDINARY_API_KEY) {
       logger.warn('Mock Cloudinary upload active (using fallback assets for development).');
       const isAudio = mimeType?.startsWith('audio/') || mimeType?.includes('webm') || mimeType?.includes('mp3') || mimeType?.includes('ogg') || mimeType?.includes('wav') || mimeType?.includes('m4a');
+      const isVideo = mimeType?.startsWith('video/') || mimeType?.includes('mp4') || mimeType?.includes('mov');
       return {
         secureUrl: isAudio 
           ? 'https://actions.google.com/sounds/v1/ambiences/rain_heavy.ogg'
-          : 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500',
+          : isVideo
+            ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
+            : 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500',
         publicId: `mock_asset_${Date.now()}`,
         width: isAudio ? 0 : 500,
         height: isAudio ? 0 : 500,
@@ -27,6 +30,7 @@ export class UploadService {
     return new Promise((resolve, reject) => {
       // [H-5 FIX] Determine resource_type and allowed formats based on MIME type
       const isAudioMime = mimeType?.startsWith('audio/') || mimeType?.includes('webm') || mimeType?.includes('ogg');
+      const isVideoMime = mimeType?.startsWith('video/') || mimeType?.includes('mp4') || mimeType?.includes('mov');
       const uploadOptions: any = {
         folder,
       };
@@ -35,6 +39,10 @@ export class UploadService {
         // Voice intros: use 'video' resource_type (Cloudinary treats audio under 'video')
         uploadOptions.resource_type = 'video';
         uploadOptions.allowed_formats = ['mp3', 'ogg', 'wav', 'webm', 'm4a', 'aac'];
+      } else if (isVideoMime) {
+        // Videos: use 'video' resource_type
+        uploadOptions.resource_type = 'video';
+        uploadOptions.allowed_formats = ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v'];
       } else {
         // Photos: restrict to safe image formats only — blocks SVG/SWF/HTML
         uploadOptions.resource_type = 'image';
