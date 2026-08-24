@@ -281,7 +281,10 @@ export class RewindLetterService {
 
     // Most relevant active letters
     const myLetter = sentLetters.find((l) => l.status === RewindLetterStatus.SEALED) || sentLetters[0] || null;
-    const receivedLetter = receivedLetters.find((l) => l.status === RewindLetterStatus.DELIVERED) || receivedLetters[0] || null;
+    const receivedLetter = receivedLetters.find((l) => l.status === RewindLetterStatus.SEALED)
+      || receivedLetters.find((l) => l.status === RewindLetterStatus.DELIVERED)
+      || receivedLetters[0]
+      || null;
 
     return {
       myLetter,
