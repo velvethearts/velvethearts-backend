@@ -6,7 +6,7 @@ export const REWIND_LETTER_DEFAULT_DELIVERY_DAYS = 7;
 export const REWIND_LETTER_DELIVERY_DAYS = 7;
 
 /** Minimum and maximum selectable unlock duration in days */
-export const REWIND_LETTER_MIN_DELIVERY_DAYS = 7;
+export const REWIND_LETTER_MIN_DELIVERY_DAYS = 1;
 export const REWIND_LETTER_MAX_DELIVERY_DAYS = 90;
 
 /** Allowed window in hours after writing for the author to edit content (48 hours = 2 days) */
