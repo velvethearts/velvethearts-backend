@@ -169,7 +169,7 @@ export class RewindLetterService {
             createdAt: myLetter.createdAt,
             deliverAfter: myLetter.deliverAfter,
             deliveredAt: myLetter.deliveredAt,
-            content: myLetter.status === RewindLetterStatus.DELIVERED ? myLetter.content : undefined,
+            content: myLetter.content,
           }
         : null,
       receivedLetter: partnerLetter
