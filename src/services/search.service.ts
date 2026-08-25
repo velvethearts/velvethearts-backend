@@ -3,6 +3,7 @@ import { BlockRepository } from '../repositories/block.repository';
 import { LikeRepository } from '../repositories/like.repository';
 import { UserStatus, ApprovalStatus } from '@prisma/client';
 import { calculateProfileCompletion } from './discover.service';
+import { calculateStateDistance } from '../constants/indiaLocations';
 
 export interface SearchFilters {
   name?: string;
@@ -25,6 +26,11 @@ export class SearchService {
   ) {
     const excludeIds = new Set<string>();
     excludeIds.add(userId);
+
+    const currentUserProfile = await prisma.profile.findUnique({
+      where: { userId },
+      select: { city: true }
+    });
 
     // Blocked exclusions
     const blockedIds = await this.blockRepository.findBlockedUserIds(userId);
@@ -151,7 +157,7 @@ export class SearchService {
         age--;
       }
 
-      const randDist = (Math.random() * 15 + 1.2).toFixed(1);
+      const distInfo = calculateStateDistance(currentUserProfile?.city, prof.city);
 
       return {
         id: u.id,
@@ -176,7 +182,9 @@ export class SearchService {
         isPremium: prof.isPremium,
         photos: prof.photos.map((p) => p.secureUrl),
         profileCompletion: calculateProfileCompletion(prof),
-        distance: `${randDist} km`,
+        distance: distInfo.formatted,
+        distanceKm: distInfo.distanceKm,
+        isSameState: distInfo.isSameState,
         createdAt: u.createdAt,
       };
     });

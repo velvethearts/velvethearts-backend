@@ -2,6 +2,7 @@ import { prisma } from '../config/database';
 import { BlockRepository } from '../repositories/block.repository';
 import { LikeRepository } from '../repositories/like.repository';
 import { UserStatus, ApprovalStatus } from '@prisma/client';
+import { calculateStateDistance } from '../constants/indiaLocations';
 
 export interface DiscoverFilters {
   gender?: string;
@@ -49,7 +50,11 @@ export class DiscoverService {
     excludeIds.add(userId);
 
     // Exclude blocked, liked, matched, and reported users in parallel
-    const [blockedIds, sentLikes, matches, reports] = await Promise.all([
+    const [currentUserProfile, blockedIds, sentLikes, matches, reports] = await Promise.all([
+      prisma.profile.findUnique({
+        where: { userId },
+        select: { city: true }
+      }),
       this.blockRepository.findBlockedUserIds(userId),
       this.likeRepository.findSentLikesByUser(userId),
       prisma.match.findMany({
@@ -203,8 +208,8 @@ export class DiscoverService {
         age--;
       }
 
-      // Generate a static/random distance placeholder
-      const randDist = (Math.random() * 15 + 1.2).toFixed(1);
+      // Calculate real inter-state distance
+      const distInfo = calculateStateDistance(currentUserProfile?.city, prof.city);
 
       return {
         id: u.id,
@@ -231,7 +236,9 @@ export class DiscoverService {
         photos: prof.photos.map((p) => p.secureUrl),
         voiceIntroUrl: prof.voiceIntroUrl || null,
         profileCompletion: calculateProfileCompletion(prof),
-        distance: `${randDist} km`,
+        distance: distInfo.formatted,
+        distanceKm: distInfo.distanceKm,
+        isSameState: distInfo.isSameState,
         createdAt: u.createdAt,
       };
     });
@@ -244,7 +251,7 @@ export class DiscoverService {
       const maxD = Number((filters as any).distanceMax);
       if (!isNaN(maxD)) {
         mapped = mapped.filter((c) => {
-          const d = parseFloat(c.distance);
+          const d = (c as any).distanceKm;
           return isNaN(d) || d <= maxD;
         });
       }
