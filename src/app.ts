@@ -128,11 +128,32 @@ import { RewindLetterService } from './services/rewind-letter.service';
 import { REWIND_LETTER_SWEEP_INTERVAL_MS } from './constants/rewind-letter.constants';
 
 const rewindLetterSweep = new RewindLetterService();
+let rewindLetterSweepInProgress = false;
+let rewindLetterSweepFailureCount = 0;
+let rewindLetterSweepNextRunAt = 0;
+
 setInterval(async () => {
+  const now = Date.now();
+  if (rewindLetterSweepInProgress || now < rewindLetterSweepNextRunAt) {
+    return;
+  }
+
+  rewindLetterSweepInProgress = true;
   try {
     await rewindLetterSweep.sweepAndDeliverLetters();
+    rewindLetterSweepFailureCount = 0;
+    rewindLetterSweepNextRunAt = 0;
   } catch (err: any) {
-    logger.error(`[RewindLetter] Sweep error: ${err?.message || err}`);
+    rewindLetterSweepFailureCount += 1;
+    const retryDelay = Math.min(
+      REWIND_LETTER_SWEEP_INTERVAL_MS * (2 ** rewindLetterSweepFailureCount),
+      15 * 60 * 1000
+    );
+
+    rewindLetterSweepNextRunAt = Date.now() + retryDelay;
+    logger.warn(`[RewindLetter] Sweep failed; retrying in ${Math.round(retryDelay / 1000)}s: ${err?.message || err}`);
+  } finally {
+    rewindLetterSweepInProgress = false;
   }
 }, REWIND_LETTER_SWEEP_INTERVAL_MS);
 
