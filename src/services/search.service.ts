@@ -172,7 +172,7 @@ export class SearchService {
         hasDisability: prof.hasDisability,
         disabilityInfo: prof.disabilityInfo,
         showDisability: prof.showDisability,
-        verified: u.approvalStatus === ApprovalStatus.APPROVED,
+        verified: Boolean(prof.verified),
         isPremium: prof.isPremium,
         photos: prof.photos.map((p) => p.secureUrl),
         profileCompletion: calculateProfileCompletion(prof),
