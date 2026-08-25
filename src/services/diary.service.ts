@@ -123,7 +123,7 @@ export class DiaryService {
         }
       }
     } else if (fallbackData?.text || fallbackData?.attachmentUrl) {
-      content = fallbackData.text || null;
+      content = fallbackData.text ? (decryptMessage(fallbackData.text) ?? fallbackData.text) : null;
       attachmentUrl = fallbackData.attachmentUrl || null;
       sourceType = (fallbackData.sourceType as any) || (attachmentUrl?.includes('voice') ? 'VOICE_NOTE' : (attachmentUrl?.match(/\.(mp4|mov|webm|mkv|m4v)/i) ? 'VIDEO' : 'MESSAGE'));
     } else {
