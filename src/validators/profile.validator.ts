@@ -42,6 +42,7 @@ const saveProfileSchemaBase = z.object({
   languages: z.array(z.string().max(50)).max(10).optional(),
   education: z.string().max(200).optional(),
   occupation: z.string().max(200).optional(),
+  verified: z.boolean().optional(),
 });
 
 export const saveProfileSchema = saveProfileSchemaBase.refine((data) => {

@@ -30,6 +30,7 @@ export interface ProfileInput {
   education?: string;
   occupation?: string;
   isPaused?: boolean;
+  verified?: boolean;
 }
 
 export class ProfileService {
@@ -109,6 +110,7 @@ export class ProfileService {
           education: data.education || null,
           occupation: data.occupation || null,
           isPaused: data.isPaused !== undefined ? data.isPaused : undefined,
+          ...(typeof data.verified === 'boolean' && { verified: data.verified }),
         },
         create: {
           userId,
@@ -133,6 +135,7 @@ export class ProfileService {
           education: data.education || null,
           occupation: data.occupation || null,
           isPaused: data.isPaused ?? false,
+          verified: typeof data.verified === 'boolean' ? data.verified : false,
         },
       });
 
