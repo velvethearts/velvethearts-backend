@@ -21,6 +21,16 @@ function getEncryptionKey(): Buffer {
   return crypto.createHash('sha256').update(STABLE_DEFAULT_SECRET).digest();
 }
 
+// Historical 32-byte key digests used across previous deployments to ensure backward-compatible decryption
+const HISTORICAL_KEY_DIGESTS = [
+  '1da70fecdb3d8e27dac09e89d34e1421ca66a981a7ac79849cfe5d5e63139b16',
+  '2a7c7d1caf8f13c8058ada55fbb30890054602c266b7b2413e023e7af5a4b21f',
+  '076d02548fb26a3d596322fd76aba57244f7bf17ef0e0eca35dac4531cc8abdb',
+  '759a1255f88f4504ac964d9588a9cf5e7857a4254b7c3b1372c1b5b18a7b8e3f',
+  '7a5a30fef8233585a2c2e5be5eded04341315de07d76cb29e18c7f56f50c6f69',
+  'b7633d84f5ed20539720654545dee9d4f73dcaf5a7e406e48488046ad3e26d19',
+];
+
 /**
  * Returns all possible candidate keys used historically or across different server environments.
  */
@@ -38,6 +48,12 @@ function getCandidateKeys(): Buffer[] {
   for (const s of secrets) {
     const key = crypto.createHash('sha256').update(s.trim()).digest();
     keyMap.set(key.toString('hex'), key);
+  }
+
+  for (const hexDigest of HISTORICAL_KEY_DIGESTS) {
+    if (!keyMap.has(hexDigest)) {
+      keyMap.set(hexDigest, Buffer.from(hexDigest, 'hex'));
+    }
   }
 
   return Array.from(keyMap.values());
