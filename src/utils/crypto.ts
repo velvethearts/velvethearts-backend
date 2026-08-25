@@ -29,12 +29,7 @@ function getCandidateKeys(): Buffer[] {
     process.env.MESSAGE_ENCRYPTION_KEY,
     STABLE_DEFAULT_SECRET,
     process.env.DATABASE_URL,
-    'postgresql://neondb_owner:npg_ckmDgdfZF40o@ep-lingering-cloud-azio0uzk.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&connect_timeout=30&pool_timeout=10',
-    'postgresql://neondb_owner:npg_ckmDgdfZF40o@ep-lingering-cloud-azio0uzk.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require',
-    'postgresql://neondb_owner:npg_ckmDgdfZF40o@ep-lingering-cloud-azio0uzk.c-3.ap-southeast-1.aws.neon.tech/neondb',
-    'postgresql://neondb_owner:npg_ckmDgdfZF40o@ep-lingering-cloud-azio0uzk-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&connect_timeout=30&pool_timeout=10',
-    'postgresql://neondb_owner:npg_ckmDgdfZF40o@ep-lingering-cloud-azio0uzk-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require',
-    'postgresql://neondb_owner:npg_ckmDgdfZF40o@ep-lingering-cloud-azio0uzk-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb',
+    process.env.DIRECT_URL,
     process.env.FIREBASE_PRIVATE_KEY,
     'velvet-hearts-default-message-secret',
   ].filter(Boolean) as string[];
