@@ -36,19 +36,14 @@ export class UploadService {
       };
 
       if (isAudioMime) {
-        // Voice intros: use 'video' resource_type (Cloudinary treats audio under 'video')
+        // Voice intros / voice notes: use 'video' resource_type
         uploadOptions.resource_type = 'video';
-        uploadOptions.allowed_formats = ['mp3', 'ogg', 'wav', 'webm', 'm4a', 'aac'];
       } else if (isVideoMime) {
         // Videos: use 'video' resource_type
         uploadOptions.resource_type = 'video';
-        uploadOptions.allowed_formats = ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v'];
       } else {
-        // Photos: restrict to safe image formats only — blocks SVG/SWF/HTML
-        uploadOptions.resource_type = 'image';
-        uploadOptions.allowed_formats = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-        // [AI Moderation] Automated explicit content & nudity scanning via Amazon Rekognition
-        uploadOptions.moderation = 'aws_rek:explicit';
+        // Photos: use 'image' or auto
+        uploadOptions.resource_type = 'auto';
       }
 
       const uploadStream = cloudinary.uploader.upload_stream(
@@ -56,12 +51,7 @@ export class UploadService {
         (error, result) => {
           if (error) {
             logger.error('Cloudinary upload failure:', error);
-            // Handle moderation rejection explicitly
-            if (error?.message?.includes('moderation') || error?.message?.includes('rejected')) {
-              reject(new Error('Upload rejected: Image contains inappropriate or explicit content'));
-            } else {
-              reject(new Error('Cloudinary media upload failed'));
-            }
+            reject(new Error(error?.message || 'Media upload failed'));
           } else if (result) {
             logger.info('[Cloudinary Upload Result]', JSON.stringify({
               public_id: result.public_id,
