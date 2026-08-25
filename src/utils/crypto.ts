@@ -8,20 +8,7 @@ const ENCRYPTED_PREFIX = 'enc:v1:';
 
 const STABLE_DEFAULT_SECRET = 'velvet-hearts-secret-encryption-key-v1-2026';
 
-/**
- * Derives a 32-byte (256-bit) encryption key from the environment.
- */
-function getEncryptionKey(): Buffer {
-  const customKey = process.env.MESSAGE_ENCRYPTION_KEY;
-  if (customKey && customKey.trim().length > 0) {
-    return crypto.createHash('sha256').update(customKey.trim()).digest();
-  }
-
-  // Stable canonical secret for consistent encryption across all environments
-  return crypto.createHash('sha256').update(STABLE_DEFAULT_SECRET).digest();
-}
-
-// Historical 32-byte key digests used across previous deployments to ensure backward-compatible decryption
+// Historical 32-byte key digests used across previous deployments to ensure legacy decryption
 const HISTORICAL_KEY_DIGESTS = [
   '1da70fecdb3d8e27dac09e89d34e1421ca66a981a7ac79849cfe5d5e63139b16',
   '2a7c7d1caf8f13c8058ada55fbb30890054602c266b7b2413e023e7af5a4b21f',
@@ -31,9 +18,6 @@ const HISTORICAL_KEY_DIGESTS = [
   'b7633d84f5ed20539720654545dee9d4f73dcaf5a7e406e48488046ad3e26d19',
 ];
 
-/**
- * Returns all possible candidate keys used historically or across different server environments.
- */
 function getCandidateKeys(): Buffer[] {
   const secrets = [
     process.env.MESSAGE_ENCRYPTION_KEY,
@@ -60,7 +44,7 @@ function getCandidateKeys(): Buffer[] {
 }
 
 /**
- * Checks whether a given string is already encrypted in the `enc:v1:` format.
+ * Checks whether a given string is in the legacy `enc:v1:` format.
  */
 export function isEncryptedMessage(text: string | null | undefined): boolean {
   if (typeof text !== 'string') return false;
@@ -68,49 +52,22 @@ export function isEncryptedMessage(text: string | null | undefined): boolean {
 }
 
 /**
- * Encrypts a plaintext message string using AES-256-GCM.
- * Output format: `enc:v1:<iv_hex>:<authTag_hex>:<ciphertext_hex>`
+ * Encryption disabled: stores all messages and moments as pure, normal plaintext.
  */
 export function encryptMessage(plaintext: string | null | undefined): string | null | undefined {
-  if (plaintext === null || plaintext === undefined || typeof plaintext !== 'string') {
-    return plaintext;
-  }
-
-  if (plaintext.trim().length === 0) {
-    return plaintext;
-  }
-
-  // Prevent double-encryption
-  if (isEncryptedMessage(plaintext)) {
-    return plaintext;
-  }
-
-  try {
-    const key = getEncryptionKey();
-    const iv = crypto.randomBytes(IV_LENGTH);
-    const cipher = crypto.createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
-
-    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-    const authTag = cipher.getAuthTag();
-
-    return `${ENCRYPTED_PREFIX}${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
-  } catch (error) {
-    logger.error('Failed to encrypt message text:', error);
-    return plaintext;
-  }
+  return plaintext;
 }
 
 /**
- * Decrypts an AES-256-GCM encrypted message string.
- * If the input is unencrypted (legacy plaintext), it is returned as-is.
- * Supports fallback across all candidate keys to ensure seamless decryption across environments.
+ * Decrypts legacy encrypted messages if present, otherwise returns normal plaintext.
+ * Never exposes raw ciphertexts or prefixes to the user.
  */
 export function decryptMessage(cipherOrPlain: string | null | undefined): string | null | undefined {
   if (cipherOrPlain === null || cipherOrPlain === undefined || typeof cipherOrPlain !== 'string') {
     return cipherOrPlain;
   }
 
-  // If not encrypted with our prefix, return as legacy plaintext
+  // Pure plaintext
   if (!isEncryptedMessage(cipherOrPlain)) {
     return cipherOrPlain;
   }
@@ -119,8 +76,7 @@ export function decryptMessage(cipherOrPlain: string | null | undefined): string
   const parts = payload.split(':');
 
   if (parts.length !== 3) {
-    logger.warn('Malformed encrypted message payload format, returning raw string');
-    return cipherOrPlain;
+    return '';
   }
 
   const [ivHex, authTagHex, encryptedHex] = parts;
@@ -130,7 +86,7 @@ export function decryptMessage(cipherOrPlain: string | null | undefined): string
     authTag = Buffer.from(authTagHex, 'hex');
     encrypted = Buffer.from(encryptedHex, 'hex');
   } catch {
-    return cipherOrPlain;
+    return '';
   }
 
   const candidateKeys = getCandidateKeys();
@@ -145,6 +101,5 @@ export function decryptMessage(cipherOrPlain: string | null | undefined): string
     }
   }
 
-  logger.warn('Could not decrypt message with any known encryption key, returning original text');
-  return cipherOrPlain;
+  return '';
 }
