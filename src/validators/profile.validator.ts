@@ -30,7 +30,13 @@ const saveProfileSchemaBase = z.object({
   disabilityInfo: z.string().max(1000).optional(),
   showDisability: z.boolean().optional().default(false),
   isPaused: z.boolean().optional().default(false),
-  photos: z.array(validPhotoUrl).min(1, 'Upload at least 1 photo').max(10, 'Maximum 10 photos'),
+  photos: z.array(validPhotoUrl)
+    .min(1, 'Upload at least 1 photo')
+    .max(10, 'Maximum 10 photos')
+    .refine(
+      (arr) => new Set(arr.filter(Boolean)).size === arr.filter(Boolean).length,
+      { message: 'You’ve already added this photo! Please upload different pictures to showcase more sides of yourself' }
+    ),
   voiceIntroUrl: validVoiceIntroUrl.optional().nullable(),
   sparkNote: z.string().max(20, 'Spark note must be 20 characters or less').optional().nullable(),
   languages: z.array(z.string().max(50)).max(10).optional(),
