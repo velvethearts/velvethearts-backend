@@ -57,6 +57,7 @@ router.get('/profile/me', requireAuth, profileCtrl.getMe);
 router.get('/profile/settings', requireAuth, profileCtrl.getSettings);
 router.put('/profile/settings', requireAuth, profileCtrl.updateSettings);
 router.post('/profile', requireAuth, profileCtrl.saveProfile);
+router.post('/profile/verify-photo', requireAuth, profileCtrl.verifyPhoto);
 router.delete('/profile', requireAuth, profileCtrl.deleteAccount);
 
 // ==========================================

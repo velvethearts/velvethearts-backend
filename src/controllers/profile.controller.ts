@@ -136,4 +136,27 @@ export class ProfileController {
       return res.status(500).json({ success: false, message: 'Updating settings failed' });
     }
   };
+
+  verifyPhoto = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { selfie, poseId } = req.body;
+      if (!selfie) {
+        return res.status(400).json({ success: false, message: 'Selfie image is required for verification' });
+      }
+
+      const result = await this.profileService.verifyUserPhoto(req.user.userId, { selfie, poseId });
+      return res.status(200).json({
+        success: true,
+        message: 'Your profile has been verified successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      logger.error('verifyPhoto controller failure:', error);
+      return res.status(500).json({ success: false, message: 'Photo verification failed' });
+    }
+  };
 }

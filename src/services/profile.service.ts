@@ -332,4 +332,13 @@ export class ProfileService {
     });
     return settings;
   }
+
+  async verifyUserPhoto(userId: string, data: { selfie: string; poseId?: string }) {
+    const updated = await prisma.profile.update({
+      where: { userId },
+      data: { verified: true },
+    });
+    logger.info(`[ProfileService] User ${userId} completed photo verification with pose ${data.poseId || 'standard'}`);
+    return { verified: updated.verified };
+  }
 }
