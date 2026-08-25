@@ -119,7 +119,7 @@ export class DiaryController {
 
       const { matchId } = req.params;
       if (!req.file) {
-        return res.status(400).json({ success: false, message: 'No photo provided' });
+        return res.status(400).json({ success: false, message: 'No photo or video provided' });
       }
 
       const caption = req.body.caption || undefined;
@@ -134,7 +134,7 @@ export class DiaryController {
 
       return res.status(201).json({ success: true, data: entry });
     } catch (err: any) {
-      logger.error('Error uploading photo to diary:', err);
+      logger.error('Error uploading media to diary:', err);
 
       // Handle explicit/nudity moderation rejection with non-shaming error message
       if (
@@ -144,12 +144,12 @@ export class DiaryController {
       ) {
         return res.status(400).json({
           success: false,
-          message: "That image couldn't be added.",
+          message: "That photo or video couldn't be added due to content moderation.",
           moderationRejected: true,
         });
       }
 
-      return res.status(500).json({ success: false, message: err.message || 'Failed to upload photo to diary' });
+      return res.status(500).json({ success: false, message: err.message || 'Failed to upload media to diary' });
     }
   };
 

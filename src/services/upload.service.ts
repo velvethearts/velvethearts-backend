@@ -30,7 +30,7 @@ export class UploadService {
     return new Promise((resolve, reject) => {
       // [H-5 FIX] Determine resource_type and allowed formats based on MIME type
       const isAudioMime = mimeType?.startsWith('audio/') || mimeType?.includes('webm') || mimeType?.includes('ogg');
-      const isVideoMime = mimeType?.startsWith('video/') || mimeType?.includes('mp4') || mimeType?.includes('mov');
+      const isVideoMime = mimeType?.startsWith('video/') || mimeType?.includes('mp4') || mimeType?.includes('mov') || mimeType?.includes('quicktime');
       const uploadOptions: any = {
         folder,
       };
@@ -39,10 +39,11 @@ export class UploadService {
         // Voice intros / voice notes: use 'video' resource_type
         uploadOptions.resource_type = 'video';
       } else if (isVideoMime) {
-        // Videos: use 'video' resource_type
+        // Videos: use 'video' resource_type with video moderation if available
         uploadOptions.resource_type = 'video';
+        // Note: Cloudinary video moderation can be configured via add-on (e.g. aws_rek or webpurify)
       } else {
-        // Photos: use 'image' or auto
+        // Photos: use 'image' or auto with moderation
         uploadOptions.resource_type = 'auto';
       }
 
@@ -51,11 +52,16 @@ export class UploadService {
         (error, result) => {
           if (error) {
             logger.error('Cloudinary upload failure:', error);
+            if (error.message?.includes('moderation') || error.message?.includes('rejected')) {
+              reject(new Error('Upload rejected: Media contains inappropriate or explicit content'));
+              return;
+            }
             reject(new Error(error?.message || 'Media upload failed'));
           } else if (result) {
             logger.info('[Cloudinary Upload Result]', JSON.stringify({
               public_id: result.public_id,
               secure_url: result.secure_url,
+              resource_type: result.resource_type,
               moderation: result.moderation,
             }, null, 2));
 
@@ -63,7 +69,7 @@ export class UploadService {
             const moderationStatus = (result.moderation as any)?.[0]?.status;
             if (moderationStatus === 'rejected') {
               logger.warn(`Cloudinary moderation REJECTED upload: ${result.public_id}`);
-              reject(new Error('Upload rejected: Image contains inappropriate or explicit content'));
+              reject(new Error('Upload rejected: Media contains inappropriate or explicit content'));
               return;
             }
 
