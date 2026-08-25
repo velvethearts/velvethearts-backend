@@ -96,7 +96,7 @@ export class DiaryService {
           where: { id: messageId },
           include: { attachments: true, conversation: true },
         });
-      } catch (_) {}
+      } catch (_) { }
     }
 
     let sourceType: 'MESSAGE' | 'VOICE_NOTE' | 'IMAGE' | 'VIDEO' = 'MESSAGE';
@@ -123,7 +123,7 @@ export class DiaryService {
         }
       }
     } else if (fallbackData?.text || fallbackData?.attachmentUrl) {
-      content = fallbackData.text ? (decryptMessage(fallbackData.text) ?? fallbackData.text) : null;
+      content = fallbackData.text || null;
       attachmentUrl = fallbackData.attachmentUrl || null;
       sourceType = (fallbackData.sourceType as any) || (attachmentUrl?.includes('voice') ? 'VOICE_NOTE' : (attachmentUrl?.match(/\.(mp4|mov|webm|mkv|m4v)/i) ? 'VIDEO' : 'MESSAGE'));
     } else {
@@ -294,7 +294,9 @@ export class DiaryService {
     const uploadResult = await this.uploadService.uploadImage(fileBuffer, 'velvet_hearts/diary', mimeType);
 
     const encryptedCaption = caption?.trim() ? (encryptMessage(caption.trim()) ?? null) : null;
-    const resolvedSourceType = mimeType?.startsWith('video/') ? 'VIDEO' : 'IMAGE';
+    const isAudio = mimeType?.startsWith('audio/') || mimeType?.includes('webm') || mimeType?.includes('ogg');
+    const isVideo = mimeType?.startsWith('video/') || mimeType?.includes('mp4') || mimeType?.includes('mov');
+    const resolvedSourceType: 'IMAGE' | 'VIDEO' | 'VOICE_NOTE' = isVideo ? 'VIDEO' : (isAudio ? 'VOICE_NOTE' : 'IMAGE');
 
     let newEntry;
     try {
@@ -322,47 +324,12 @@ export class DiaryService {
           },
         },
       });
-    } catch (dbErr: any) {
-      if (dbErr?.message?.includes('22P02') || dbErr?.message?.includes('DiarySourceType')) {
-        try {
-          await (prisma as any).$executeRawUnsafe(`ALTER TYPE "DiarySourceType" ADD VALUE IF NOT EXISTS 'VIDEO';`);
-          newEntry = await (prisma as any).diaryEntry.create({
-            data: {
-              matchId,
-              savedByUserId: userId,
-              sourceType: resolvedSourceType,
-              content: null,
-              attachmentUrl: uploadResult.secureUrl,
-              attachmentPublicId: uploadResult.publicId,
-              caption: encryptedCaption,
-            },
-            include: {
-              savedBy: {
-                select: {
-                  id: true,
-                  profile: {
-                    select: {
-                      name: true,
-                      photos: { take: 1, select: { secureUrl: true } },
-                    },
-                  },
-                },
-              },
-            },
-          });
-        } catch (retryErr) {
-          if (uploadResult.publicId) {
-            await this.uploadService.deleteAsset(uploadResult.publicId, resolvedSourceType === 'VIDEO' ? 'video' : 'image');
-          }
-          throw retryErr;
-        }
-      } else {
-        // If DB insert fails, cleanup Cloudinary asset so no orphaned files remain
-        if (uploadResult.publicId) {
-          await this.uploadService.deleteAsset(uploadResult.publicId, resolvedSourceType === 'VIDEO' ? 'video' : 'image');
-        }
-        throw dbErr;
+    } catch (dbErr) {
+      // If DB insert fails, cleanup Cloudinary asset so no orphaned files remain
+      if (uploadResult.publicId) {
+        await this.uploadService.deleteAsset(uploadResult.publicId);
       }
+      throw dbErr;
     }
 
     if (match.conversation?.id) {

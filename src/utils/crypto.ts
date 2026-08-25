@@ -22,8 +22,7 @@ function getEncryptionKey(): Buffer {
 }
 
 /**
- * Returns all possible candidate keys used historically or across different server environments
- * (e.g., direct DB URL vs pooled DB URL vs custom key).
+ * Returns all possible candidate keys used historically or across different server environments.
  */
 function getCandidateKeys(): Buffer[] {
   const secrets = [
@@ -40,7 +39,6 @@ function getCandidateKeys(): Buffer[] {
     'velvet-hearts-default-message-secret',
   ].filter(Boolean) as string[];
 
-  // Deduplicate keys by hex digest
   const keyMap = new Map<string, Buffer>();
   for (const s of secrets) {
     const key = crypto.createHash('sha256').update(s.trim()).digest();
