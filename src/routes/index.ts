@@ -20,11 +20,20 @@ import { DiaryController } from '../controllers/diary.controller';
 import { requireAuth, requireRole } from '../middlewares/auth.middleware';
 import { 
   authRateLimiter, 
+  photoVerifyRateLimiter,
+  profileMutationLimiter,
+  accountDeleteLimiter,
   likeRateLimiter, 
   chatRateLimiter, 
   reportRateLimiter, 
+  blockRateLimiter,
   searchDiscoverRateLimiter,
   uploadRateLimiter,
+  rewindLetterLimiter,
+  pushRateLimiter,
+  adminPrivilegeLimiter,
+  adminActionLimiter,
+  typingRateLimiter,
 } from '../middlewares/rate-limiter.middleware';
 
 const router = Router();
@@ -55,37 +64,37 @@ router.post('/auth/login', authRateLimiter, authCtrl.login);
 // Pending users are allowed to retrieve their profile to check approvalStatus
 router.get('/profile/me', requireAuth, profileCtrl.getMe);
 router.get('/profile/settings', requireAuth, profileCtrl.getSettings);
-router.put('/profile/settings', requireAuth, profileCtrl.updateSettings);
-router.post('/profile', requireAuth, profileCtrl.saveProfile);
-router.post('/profile/verify-photo', requireAuth, profileCtrl.verifyPhoto);
-router.delete('/profile', requireAuth, profileCtrl.deleteAccount);
+router.put('/profile/settings', requireAuth, profileMutationLimiter, profileCtrl.updateSettings);
+router.post('/profile', requireAuth, profileMutationLimiter, profileCtrl.saveProfile);
+router.post('/profile/verify-photo', requireAuth, photoVerifyRateLimiter, profileCtrl.verifyPhoto);
+router.delete('/profile', requireAuth, accountDeleteLimiter, profileCtrl.deleteAccount);
 
 // ==========================================
 // DISCOVER & SEARCH ROUTES
 // ==========================================
-router.get('/discover', requireAuth,  searchDiscoverRateLimiter, discoverCtrl.getRecommendations);
+router.get('/discover', requireAuth, searchDiscoverRateLimiter, discoverCtrl.getRecommendations);
 
 // Internal cron endpoint for discover nudges (protected by x-cron-secret header)
-router.post('/internal/cron/discover-nudge', discoverCtrl.runDiscoverNudge);
-router.get('/search', requireAuth,  searchDiscoverRateLimiter, searchCtrl.search);
+router.post('/internal/cron/discover-nudge', searchDiscoverRateLimiter, discoverCtrl.runDiscoverNudge);
+router.get('/search', requireAuth, searchDiscoverRateLimiter, searchCtrl.search);
 
 // ==========================================
 // MATCH ROUTES
 // ==========================================
-router.post('/match/like', requireAuth,  likeRateLimiter, matchCtrl.like);
+router.post('/match/like', requireAuth, likeRateLimiter, matchCtrl.like);
 router.post('/match/unlike', requireAuth, likeRateLimiter, matchCtrl.unlike);
-router.post('/match/unmatch', requireAuth,  matchCtrl.unmatch);
-router.get('/match/connections', requireAuth,  matchCtrl.getConnections);
+router.post('/match/unmatch', requireAuth, likeRateLimiter, matchCtrl.unmatch);
+router.get('/match/connections', requireAuth, matchCtrl.getConnections);
 router.get('/match/received-invites', requireAuth, matchCtrl.getReceivedInvites);
 router.get('/match/sent-invites', requireAuth, matchCtrl.getSentInvites);
 
 // ==========================================
 // REWIND LETTER ROUTES
 // ==========================================
-router.post('/rewind-letter', requireAuth, rewindLetterCtrl.write);
-router.put('/rewind-letter/:matchId', requireAuth, rewindLetterCtrl.edit);
-router.delete('/rewind-letter/:matchId', requireAuth, rewindLetterCtrl.delete);
-router.patch('/rewind-letter/:matchId/schedule', requireAuth, rewindLetterCtrl.updateSchedule);
+router.post('/rewind-letter', requireAuth, rewindLetterLimiter, rewindLetterCtrl.write);
+router.put('/rewind-letter/:matchId', requireAuth, rewindLetterLimiter, rewindLetterCtrl.edit);
+router.delete('/rewind-letter/:matchId', requireAuth, rewindLetterLimiter, rewindLetterCtrl.delete);
+router.patch('/rewind-letter/:matchId/schedule', requireAuth, rewindLetterLimiter, rewindLetterCtrl.updateSchedule);
 router.get('/rewind-letter/:matchId/status', requireAuth, rewindLetterCtrl.getStatus);
 router.get('/rewind-letter/:matchId/content', requireAuth, rewindLetterCtrl.getDelivered);
 
@@ -101,25 +110,25 @@ router.delete('/diary/:matchId/:entryId', requireAuth, chatRateLimiter, diaryCtr
 // ==========================================
 // SAFETY ROUTES (BLOCK & REPORT)
 // ==========================================
-router.post('/block', requireAuth, safetyCtrl.block);
-router.delete('/block/:blockedUserId', requireAuth, safetyCtrl.unblock);
-router.post('/unblock', requireAuth, safetyCtrl.unblock);
+router.post('/block', requireAuth, blockRateLimiter, safetyCtrl.block);
+router.delete('/block/:blockedUserId', requireAuth, blockRateLimiter, safetyCtrl.unblock);
+router.post('/unblock', requireAuth, blockRateLimiter, safetyCtrl.unblock);
 router.get('/safety/blocked', requireAuth, safetyCtrl.getBlockedUsers);
 router.post('/safety/reports', requireAuth, reportRateLimiter, safetyCtrl.report);
 
 // ==========================================
 // CHAT & MESSAGING ROUTES
 // ==========================================
-router.get('/chat/conversations', requireAuth,  chatCtrl.getConversations);
+router.get('/chat/conversations', requireAuth, chatCtrl.getConversations);
 router.get('/chat/conversations/:conversationId/messages', requireAuth, chatCtrl.getMessages);
-router.post('/chat/conversations/:conversationId/messages', requireAuth,  chatRateLimiter, chatCtrl.sendMessage);
-router.delete('/chat/conversations/:conversationId/messages', requireAuth, chatCtrl.deleteConversationMessages);
+router.post('/chat/conversations/:conversationId/messages', requireAuth, chatRateLimiter, chatCtrl.sendMessage);
+router.delete('/chat/conversations/:conversationId/messages', requireAuth, chatRateLimiter, chatCtrl.deleteConversationMessages);
 router.put('/chat/messages/:messageId', requireAuth, chatRateLimiter, chatCtrl.editMessage);
-router.delete('/chat/messages/:messageId', requireAuth, chatCtrl.deleteMessage);
-router.post('/chat/conversations/:conversationId/seen', requireAuth, chatCtrl.markSeen);
-router.post('/chat/conversations/:conversationId/delivered', requireAuth, chatCtrl.markDelivered);
-router.post('/chat/conversations/:conversationId/typing', requireAuth, chatCtrl.postTyping);
-router.get('/chat/conversations/:conversationId/typing', requireAuth, chatCtrl.getTyping);
+router.delete('/chat/messages/:messageId', requireAuth, chatRateLimiter, chatCtrl.deleteMessage);
+router.post('/chat/conversations/:conversationId/seen', requireAuth, typingRateLimiter, chatCtrl.markSeen);
+router.post('/chat/conversations/:conversationId/delivered', requireAuth, typingRateLimiter, chatCtrl.markDelivered);
+router.post('/chat/conversations/:conversationId/typing', requireAuth, typingRateLimiter, chatCtrl.postTyping);
+router.get('/chat/conversations/:conversationId/typing', requireAuth, typingRateLimiter, chatCtrl.getTyping);
 
 // ==========================================
 // UPLOAD ROUTE
@@ -135,27 +144,27 @@ router.post('/notifications/read-all', requireAuth, notifCtrl.markAllRead);
 router.delete('/notifications/:id', requireAuth, notifCtrl.deleteNotification);
 
 // Web Push API
-router.get('/push/vapid-public-key', pushCtrl.getVapidPublicKey);
-router.post('/push/subscribe', requireAuth, pushCtrl.subscribe);
-router.post('/push/unsubscribe', requireAuth, pushCtrl.unsubscribe);
+router.get('/push/vapid-public-key', pushRateLimiter, pushCtrl.getVapidPublicKey);
+router.post('/push/subscribe', requireAuth, pushRateLimiter, pushCtrl.subscribe);
+router.post('/push/unsubscribe', requireAuth, pushRateLimiter, pushCtrl.unsubscribe);
 
 // ==========================================
 // ADMIN DASHBOARD ROUTES
 // ==========================================
-router.get('/admin/stats', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.getDashboardStats);
-router.get('/admin/users', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.getUsers);
-router.post('/admin/users/:userId/suspend', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.suspendUser);
-router.post('/admin/users/:userId/restore', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.restoreUser);
-router.get('/admin/users/pending', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.getPendingQueue);
-router.post('/admin/users/:userId/approve', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.approve);
-router.post('/admin/users/:userId/reject', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.reject);
-router.get('/admin/users/history', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.getPhoneHistory);
-router.get('/admin/reports', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.getReports);
-router.post('/admin/reports/:reportId/close', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.closeReport);
-router.get('/admin/logs', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminCtrl.getAuditLogs);
+router.get('/admin/stats', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getDashboardStats);
+router.get('/admin/users', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getUsers);
+router.post('/admin/users/:userId/suspend', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.suspendUser);
+router.post('/admin/users/:userId/restore', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.restoreUser);
+router.get('/admin/users/pending', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getPendingQueue);
+router.post('/admin/users/:userId/approve', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.approve);
+router.post('/admin/users/:userId/reject', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.reject);
+router.get('/admin/users/history', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getPhoneHistory);
+router.get('/admin/reports', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getReports);
+router.post('/admin/reports/:reportId/close', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.closeReport);
+router.get('/admin/logs', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getAuditLogs);
 
 // SUPER ADMIN ONLY OPERATIONS
-router.post('/admin/create', requireAuth, requireRole(['SUPER_ADMIN']), adminCtrl.createAdmin);
-router.post('/admin/remove', requireAuth, requireRole(['SUPER_ADMIN']), adminCtrl.removeAdmin);
+router.post('/admin/create', requireAuth, requireRole(['SUPER_ADMIN']), adminPrivilegeLimiter, adminCtrl.createAdmin);
+router.post('/admin/remove', requireAuth, requireRole(['SUPER_ADMIN']), adminPrivilegeLimiter, adminCtrl.removeAdmin);
 
 export default router;

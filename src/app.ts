@@ -7,8 +7,12 @@ import { logger } from './utils/logger';
 import apiRouter from './routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { initSocketServer } from './socket';
+import { apiRateLimiter } from './middlewares/rate-limiter.middleware';
 
 const app = express();
+
+// Trust reverse proxy (Render, Vercel, Cloudflare, etc.) for correct client IP detection in rate limiting
+app.set('trust proxy', 1);
 
 // Security Middlewares
 // [M-6 FIX] Configure Helmet with CSP appropriate for JSON API
@@ -61,8 +65,8 @@ app.use((req, _res, next) => {
   next();
 });
 
-// API Routes
-app.use('/api/v1', apiRouter);
+// API Routes with global baseline rate limiter
+app.use('/api/v1', apiRateLimiter, apiRouter);
 
 // Health Check Endpoint
 app.get('/health', (_req, res) => {
