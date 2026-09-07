@@ -356,6 +356,7 @@ export class AdminService {
 
     if (searchQuery) {
       whereClause.OR = [
+        { id: { contains: searchQuery, mode: 'insensitive' } },
         { name: { contains: searchQuery, mode: 'insensitive' } },
         { phoneNumber: { contains: searchQuery, mode: 'insensitive' } },
         { email: { contains: searchQuery, mode: 'insensitive' } },
