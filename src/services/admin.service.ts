@@ -2,6 +2,7 @@ import { UserRepository } from '../repositories/user.repository';
 import { ActivityLogRepository } from '../repositories/activity-log.repository';
 import { ApprovalStatus, UserStatus, ReportStatus, Role, VerificationRequestStatus } from '@prisma/client';
 import { prisma } from '../config/database';
+import { logger } from '../utils/logger';
 
 export class AdminService {
   private userRepository = new UserRepository();
@@ -34,20 +35,21 @@ export class AdminService {
     return Promise.all(list.map(async (user) => {
       const prof = user.profile;
       
-      // Look up previous attempts with the same phone number or email
-      const priorRecords = await prisma.user.findMany({
+      // Look up previous attempts with the same phone number or email safely
+      const priorConditions: any[] = [];
+      if (user.phoneNumber) priorConditions.push({ phoneNumber: user.phoneNumber });
+      if (user.email) priorConditions.push({ email: user.email });
+
+      const priorRecords = priorConditions.length > 0 ? await prisma.user.findMany({
         where: {
-          OR: [
-            { phoneNumber: user.phoneNumber },
-            { email: user.email ? user.email : undefined }
-          ],
+          OR: priorConditions,
           id: { not: user.id }
         },
         select: {
           approvalStatus: true,
           status: true
         }
-      });
+      }) : [];
 
       const hasPriorHistory = priorRecords.length > 0;
       const priorRejections = priorRecords.filter(r => r.approvalStatus === ApprovalStatus.REJECTED).length;
@@ -55,15 +57,16 @@ export class AdminService {
 
       return {
         userId: user.id,
-        name: prof?.name || null,
+        name: prof?.name || user.name || null,
         phoneNumber: user.phoneNumber,
+        email: user.email || null,
         submissionTime: user.createdAt,
         profileCompletion: this.calculateProfileCompletion(prof),
         approvalStatus: user.approvalStatus,
         city: prof?.city || null,
         gender: prof?.gender || null,
         relationshipIntent: prof?.relationshipIntent || null,
-        photos: prof?.photos.map((p: any) => p.secureUrl) || [],
+        photos: prof?.photos?.map((p: any) => p?.secureUrl || p) || [],
         hasPriorHistory,
         priorRejections,
         priorDeletions,
@@ -168,12 +171,27 @@ export class AdminService {
     const suspendedCount = await prisma.user.count({ where: { status: UserStatus.SUSPENDED } });
     const deletedCount = await prisma.user.count({ where: { status: UserStatus.DELETED } });
     const reportsCount = await prisma.report.count({ where: { status: ReportStatus.PENDING } });
+    const verificationPendingCount = await prisma.verificationRequest.count({ where: { status: VerificationRequestStatus.PENDING } });
+    const userCount = await prisma.user.count({ where: { role: Role.USER } });
+    const adminCount = await prisma.user.count({ where: { role: { in: [Role.ADMIN, Role.SUPER_ADMIN] } } });
+    const approvedCount = await prisma.user.count({ where: { approvalStatus: ApprovalStatus.APPROVED } });
+    const rejectedCount = await prisma.user.count({ where: { approvalStatus: ApprovalStatus.REJECTED } });
+    const verifiedCount = await prisma.profile.count({ where: { verified: true } });
+    const completedProfileCount = await prisma.user.count({ where: { profile: { isNot: null } } });
+    const incompleteProfileCount = await prisma.user.count({ where: { profile: null } });
 
     const recentRegistrations = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      take: 50,
       include: {
-        profile: true,
+        profile: {
+          include: {
+            photos: {
+              where: { isPrimary: true },
+              take: 1,
+            },
+          },
+        },
       },
     });
 
@@ -184,16 +202,29 @@ export class AdminService {
         suspendedCount,
         deletedCount,
         reportsCount,
+        verificationPendingCount,
+        verifiedCount,
         totalCount: activeCount + suspendedCount + deletedCount,
+        userCount,
+        adminCount,
+        approvedCount,
+        rejectedCount,
+        completedProfileCount,
+        incompleteProfileCount,
       },
       recentRegistrations: recentRegistrations.map(r => ({
         id: r.id,
+        email: r.email,
         phoneNumber: r.phoneNumber,
         role: r.role,
         approvalStatus: r.approvalStatus,
         status: r.status,
         createdAt: r.createdAt,
-        name: r.profile?.name || null,
+        name: r.profile?.name || r.name || null,
+        hasProfile: Boolean(r.profile),
+        city: r.profile?.city || null,
+        verified: r.profile?.verified || false,
+        avatarUrl: r.profile?.photos?.[0]?.secureUrl || null,
       })),
     };
   }
@@ -252,7 +283,15 @@ export class AdminService {
     return updated;
   }
 
-  async getUsers(searchQuery?: string, role?: Role, status?: UserStatus, page = 1, limit = 20) {
+  async getUsers(
+    searchQuery?: string,
+    role?: Role,
+    status?: UserStatus,
+    approvalStatus?: ApprovalStatus,
+    page = 1,
+    limit = 20,
+    profileStatus?: 'COMPLETED' | 'INCOMPLETE'
+  ) {
     const skip = (page - 1) * limit;
 
     const whereClause: any = {};
@@ -265,9 +304,21 @@ export class AdminService {
       whereClause.status = status;
     }
 
+    if (approvalStatus) {
+      whereClause.approvalStatus = approvalStatus;
+    }
+
+    if (profileStatus === 'COMPLETED') {
+      whereClause.profile = { isNot: null };
+    } else if (profileStatus === 'INCOMPLETE') {
+      whereClause.profile = null;
+    }
+
     if (searchQuery) {
       whereClause.OR = [
+        { name: { contains: searchQuery, mode: 'insensitive' } },
         { phoneNumber: { contains: searchQuery, mode: 'insensitive' } },
+        { email: { contains: searchQuery, mode: 'insensitive' } },
         {
           profile: {
             name: { contains: searchQuery, mode: 'insensitive' },
@@ -280,7 +331,17 @@ export class AdminService {
     const users = await prisma.user.findMany({
       where: whereClause,
       include: {
-        profile: true,
+        profile: {
+          include: {
+            photos: {
+              orderBy: { photoOrder: 'asc' },
+            },
+          },
+        },
+        verificationRequests: {
+          where: { status: 'APPROVED' },
+          take: 1,
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -290,13 +351,17 @@ export class AdminService {
     return {
       users: users.map(u => ({
         id: u.id,
+        email: u.email,
         phoneNumber: u.phoneNumber,
         role: u.role,
         approvalStatus: u.approvalStatus,
         status: u.status,
         createdAt: u.createdAt,
-        name: u.profile?.name || null,
+        name: u.profile?.name || u.name || null,
+        hasProfile: Boolean(u.profile),
         city: u.profile?.city || null,
+        verified: Boolean(u.profile?.verified || (u.verificationRequests && u.verificationRequests.length > 0)),
+        photos: u.profile?.photos?.map((p: any) => p?.secureUrl || p) || [],
       })),
       pagination: {
         total,
@@ -305,6 +370,119 @@ export class AdminService {
         pages: Math.ceil(total / limit) || 1,
       },
     };
+  }
+
+  async toggleUserVerification(userId: string, adminId: string, verified: boolean) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    let profile = user.profile;
+
+    if (profile) {
+      profile = await prisma.profile.update({
+        where: { userId },
+        data: { verified },
+      });
+    }
+
+    // Update any existing verification requests for this user
+    const existingReq = await prisma.verificationRequest.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingReq) {
+      await prisma.verificationRequest.update({
+        where: { id: existingReq.id },
+        data: {
+          status: verified ? VerificationRequestStatus.APPROVED : VerificationRequestStatus.REJECTED,
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          adminNotes: verified ? 'Verified by admin' : 'Unverified by admin',
+        },
+      });
+    } else if (verified) {
+      // Pre-approve verification request for onboarding user
+      await prisma.verificationRequest.create({
+        data: {
+          userId,
+          selfieUrl: '',
+          status: VerificationRequestStatus.APPROVED,
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          adminNotes: 'Verified directly by admin in Admin Panel',
+        },
+      });
+    }
+
+    await prisma.activityLog.create({
+      data: {
+        adminId,
+        userId,
+        action: verified ? 'VERIFY_USER_MANUAL' : 'UNVERIFY_USER_MANUAL',
+        details: JSON.stringify({ verified, hadProfile: Boolean(profile) }),
+      },
+    });
+
+    // Notify the user in real time via Socket.IO
+    try {
+      const { io } = await import('../socket');
+      if (io) {
+        io.to(userId).emit('user_verification_updated', {
+          userId,
+          verified,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      logger.warn('Failed to emit user_verification_updated socket event:', err);
+    }
+
+    return {
+      success: true,
+      verified,
+      hadProfile: Boolean(profile),
+      profile,
+    };
+  }
+
+  async createDemoVerification(_adminId: string) {
+    const user = await prisma.user.findFirst({
+      where: {
+        profile: {
+          photos: { some: {} },
+        },
+      },
+      include: {
+        profile: {
+          include: {
+            photos: { take: 1 },
+          },
+        },
+      },
+    });
+
+    if (!user || !user.profile) {
+      throw new Error('No user profile found to generate demo verification');
+    }
+
+    const demoReq = await prisma.verificationRequest.create({
+      data: {
+        userId: user.id,
+        selfieUrl: user.profile.photos[0]?.secureUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
+        referenceUrl: user.profile.photos[0]?.secureUrl || null,
+        autoFailReason: 'Demo: Minor facial angle variance (33 deg roll angle detected)',
+        status: VerificationRequestStatus.PENDING,
+      },
+    });
+
+    return demoReq;
   }
 
   // Super Admin: promote, demote, suspend, restore
@@ -353,10 +531,39 @@ export class AdminService {
     return { success: true };
   }
 
+  async deleteUser(userId: string, adminId: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('User not found');
+    if (user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN) {
+      throw new Error('Admin accounts cannot be deleted');
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        status: UserStatus.DELETED,
+        deletedAt: new Date(),
+        firebaseUid: null,
+      },
+    });
+
+    await this.logRepository.create({
+      userId,
+      adminId,
+      action: 'ADMIN_DELETE_USER',
+      details: JSON.stringify({ deletedBy: adminId }),
+    });
+
+    return { success: true };
+  }
+
   async restoreUser(userId: string, adminId: string) {
     await prisma.user.update({
       where: { id: userId },
-      data: { status: UserStatus.ACTIVE },
+      data: { 
+        status: UserStatus.ACTIVE,
+        deletedAt: null,
+      },
     });
 
     await this.logRepository.create({
@@ -429,13 +636,13 @@ export class AdminService {
     return requests.map(r => ({
       id: r.id,
       userId: r.userId,
-      userName: r.user.profile?.name || 'Unknown',
-      userPhone: r.user.phoneNumber,
-      userCity: r.user.profile?.city || null,
-      userGender: r.user.profile?.gender || null,
+      userName: r.user?.profile?.name || 'Unknown',
+      userPhone: r.user?.phoneNumber || '—',
+      userCity: r.user?.profile?.city || null,
+      userGender: r.user?.profile?.gender || null,
       selfieUrl: r.selfieUrl,
       referenceUrl: r.referenceUrl,
-      profilePhotos: r.user.profile?.photos.map((p: any) => p.secureUrl) || [],
+      profilePhotos: r.user?.profile?.photos?.map((p: any) => p?.secureUrl || p) || [],
       autoFailReason: r.autoFailReason,
       adminNotes: r.adminNotes,
       status: r.status,

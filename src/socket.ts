@@ -120,6 +120,11 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string | st
     socket.join(userId);
     logger.debug(`User ${userId} joined personal room`);
 
+    if (socket.data.role === 'ADMIN' || socket.data.role === 'SUPER_ADMIN') {
+      socket.join('admins');
+      logger.info(`Admin user ${userId} joined admins socket room`);
+    }
+
     // Track online status
     const currentCount = userSocketCounts.get(userId) || 0;
     userSocketCounts.set(userId, currentCount + 1);

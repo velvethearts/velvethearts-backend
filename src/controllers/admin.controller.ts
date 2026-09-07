@@ -3,7 +3,7 @@ import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { AdminService } from '../services/admin.service';
 import { logger } from '../utils/logger';
 import { z } from 'zod';
-import { ReportStatus, UserStatus, Role, VerificationRequestStatus } from '@prisma/client';
+import { ReportStatus, UserStatus, Role, VerificationRequestStatus, ApprovalStatus } from '@prisma/client';
 
 const approveRejectSchema = z.object({
   userId: z.string().uuid('Invalid user ID format'),
@@ -14,10 +14,17 @@ const closeReportSchema = z.object({
   internalNotes: z.string().optional(),
 });
 
+const emptyToUndefined = (val: unknown) => {
+  if (val === '' || val === 'undefined' || val === 'null' || val === undefined) return undefined;
+  return val;
+};
+
 const getUsersSchema = z.object({
-  searchQuery: z.string().optional(),
-  role: z.nativeEnum(Role).optional(),
-  status: z.nativeEnum(UserStatus).optional(),
+  searchQuery: z.preprocess(emptyToUndefined, z.string().optional()),
+  role: z.preprocess(emptyToUndefined, z.nativeEnum(Role).optional()),
+  status: z.preprocess(emptyToUndefined, z.nativeEnum(UserStatus).optional()),
+  approvalStatus: z.preprocess(emptyToUndefined, z.nativeEnum(ApprovalStatus).optional()),
+  profileStatus: z.preprocess(emptyToUndefined, z.enum(['COMPLETED', 'INCOMPLETE']).optional()),
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(20),
 });
@@ -191,12 +198,15 @@ export class AdminController {
         return res.status(400).json({ success: false, message: result.error.errors[0].message });
       }
 
-      const { searchQuery, role, status, page, limit } = result.data;
-      const data = await this.adminService.getUsers(searchQuery, role, status, page, limit);
+      const { searchQuery, role, status, approvalStatus, profileStatus, page, limit } = result.data;
+      const data = await this.adminService.getUsers(searchQuery, role, status, approvalStatus, page, limit, profileStatus);
 
       return res.status(200).json({
         success: true,
-        data: data.users,
+        data: {
+          users: data.users,
+          pagination: data.pagination,
+        },
         pagination: data.pagination,
       });
     } catch (error: any) {
@@ -289,6 +299,25 @@ export class AdminController {
     }
   };
 
+  deleteUser = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { userId } = req.params;
+      await this.adminService.deleteUser(userId, req.user.userId);
+
+      return res.status(200).json({
+        success: true,
+        message: 'User account marked as deleted',
+      });
+    } catch (error: any) {
+      logger.error('deleteUser controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Deleting user failed' });
+    }
+  };
+
   getAuditLogs = async (req: AuthenticatedRequest, res: Response) => {
     try {
       // [H-8 FIX] Validate and cap pagination parameters
@@ -370,6 +399,46 @@ export class AdminController {
     } catch (error: any) {
       logger.error('rejectVerification controller failure:', error);
       return res.status(500).json({ success: false, message: error.message || 'Rejecting verification failed' });
+    }
+  };
+
+  toggleUserVerification = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { userId } = req.params;
+      const { verified } = req.body;
+
+      await this.adminService.toggleUserVerification(userId, req.user.userId, Boolean(verified));
+
+      return res.status(200).json({
+        success: true,
+        message: `User verification updated to ${Boolean(verified)}`,
+      });
+    } catch (error: any) {
+      logger.error('toggleUserVerification controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Updating user verification failed' });
+    }
+  };
+
+  createDemoVerification = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const request = await this.adminService.createDemoVerification(req.user.userId);
+
+      return res.status(201).json({
+        success: true,
+        data: request,
+        message: 'Demo verification request generated successfully',
+      });
+    } catch (error: any) {
+      logger.error('createDemoVerification controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Creating demo verification failed' });
     }
   };
 }

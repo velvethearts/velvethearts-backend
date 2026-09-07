@@ -45,11 +45,14 @@ export class UserRepository {
     });
   }
 
- async delete(id: string): Promise<User> {
-  return prisma.user.delete({
-    where: {
-      id,
-    },
-  });
-}
+  async delete(id: string): Promise<User> {
+    return prisma.user.update({
+      where: { id },
+      data: {
+        status: UserStatus.DELETED,
+        deletedAt: new Date(),
+        firebaseUid: null,
+      },
+    });
+  }
 }

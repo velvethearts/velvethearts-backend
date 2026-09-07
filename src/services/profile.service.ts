@@ -43,6 +43,22 @@ export class ProfileService {
     const profile = await this.profileRepository.findByUserId(userId);
     if (!profile) return null;
 
+    const latestVerification = await prisma.verificationRequest.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        adminNotes: true,
+        createdAt: true,
+        reviewedAt: true,
+      },
+    });
+
+    const verificationStatus = profile.verified
+      ? 'APPROVED'
+      : (latestVerification?.status || null);
+
     const dobDate = new Date(profile.dob);
     return {
       id: profile.id,
@@ -67,6 +83,8 @@ export class ProfileService {
       disabilityInfo: profile.disabilityInfo,
       showDisability: profile.showDisability,
       verified: profile.verified,
+      verificationStatus,
+      latestVerificationRequest: latestVerification || null,
       isPremium: profile.isPremium,
       isPaused: profile.isPaused ?? false,
       photos: profile.photos.map((p) => p.secureUrl),
@@ -80,10 +98,17 @@ export class ProfileService {
   }
 
   async saveProfile(userId: string, data: ProfileInput) {
+    const existingProfile = await prisma.profile.findUnique({ where: { userId }, select: { id: true } });
+    const isFirstTimeCompletion = !existingProfile;
+
     const d = parseInt(String(data.dobDay), 10);
     const m = parseInt(String(data.dobMonth), 10);
     const y = parseInt(String(data.dobYear), 10);
     const dob = new Date(y, m - 1, d);
+
+    const hasApprovedVerification = await prisma.verificationRequest.findFirst({
+      where: { userId, status: 'APPROVED' },
+    });
 
     await prisma.$transaction(async (tx) => {
       const profile = await tx.profile.upsert({
@@ -110,7 +135,7 @@ export class ProfileService {
           education: data.education || null,
           occupation: data.occupation || null,
           isPaused: data.isPaused !== undefined ? data.isPaused : undefined,
-          ...(typeof data.verified === 'boolean' && { verified: data.verified }),
+          ...(typeof data.verified === 'boolean' ? { verified: data.verified } : (isFirstTimeCompletion && hasApprovedVerification ? { verified: true } : {})),
         },
         create: {
           userId,
@@ -135,7 +160,7 @@ export class ProfileService {
           education: data.education || null,
           occupation: data.occupation || null,
           isPaused: data.isPaused ?? false,
-          verified: typeof data.verified === 'boolean' ? data.verified : false,
+          verified: Boolean(hasApprovedVerification) || (typeof data.verified === 'boolean' ? data.verified : false),
         },
       });
 
@@ -188,6 +213,22 @@ export class ProfileService {
       }
     } catch (err: any) {
       console.error('[ProfileService] Failed checking/sending welcome email after saveProfile:', err);
+    }
+
+    // Notify admins in real time via Socket.IO that onboarding was completed
+    try {
+      const { io } = await import('../socket');
+      if (io) {
+        io.to('admins').emit('profile_onboarding_completed', {
+          userId,
+          name: data.name,
+          city: data.city,
+          isFirstTime: isFirstTimeCompletion,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (socketErr) {
+      logger.warn('[ProfileService] Failed emitting profile_onboarding_completed socket event:', socketErr);
     }
 
     return this.getProfile(userId);
@@ -398,6 +439,23 @@ export class ProfileService {
       },
     });
 
-    return latest || null;
+    if (!latest) {
+      const profile = await prisma.profile.findUnique({
+        where: { userId },
+        select: { verified: true, updatedAt: true },
+      });
+      if (profile?.verified) {
+        return {
+          id: 'verified_profile',
+          status: 'APPROVED',
+          adminNotes: null,
+          createdAt: profile.updatedAt,
+          reviewedAt: profile.updatedAt,
+        };
+      }
+      return null;
+    }
+
+    return latest;
   }
 }
