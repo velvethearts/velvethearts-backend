@@ -55,21 +55,43 @@ export class AdminService {
       const priorRejections = priorRecords.filter(r => r.approvalStatus === ApprovalStatus.REJECTED).length;
       const priorDeletions = priorRecords.filter(r => r.status === UserStatus.DELETED).length;
 
+      const photoUrls = prof?.photos?.map((p: any) => p?.secureUrl || p) || [];
+      const isVerified = Boolean(prof?.verified);
+
       return {
+        id: user.id,
         userId: user.id,
         name: prof?.name || user.name || null,
         phoneNumber: user.phoneNumber,
         email: user.email || null,
         submissionTime: user.createdAt,
+        createdAt: user.createdAt,
+        role: user.role,
+        status: user.status,
+        verified: isVerified,
+        hasProfile: Boolean(prof),
         profileCompletion: this.calculateProfileCompletion(prof),
         approvalStatus: user.approvalStatus,
         city: prof?.city || null,
         gender: prof?.gender || null,
         relationshipIntent: prof?.relationshipIntent || null,
-        photos: prof?.photos?.map((p: any) => p?.secureUrl || p) || [],
+        photos: photoUrls,
         hasPriorHistory,
         priorRejections,
         priorDeletions,
+        profile: prof ? {
+          ...prof,
+          id: prof.id,
+          userId: user.id,
+          name: prof.name || user.name,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role: user.role,
+          status: user.status,
+          verified: isVerified,
+          photos: photoUrls,
+          promptAnswers: (prof as any).promptAnswers || [],
+        } : null,
       };
     }));
   }
@@ -187,9 +209,9 @@ export class AdminService {
         profile: {
           include: {
             photos: {
-              where: { isPrimary: true },
-              take: 1,
+              orderBy: { photoOrder: 'asc' },
             },
+            promptAnswers: true,
           },
         },
       },
@@ -212,20 +234,38 @@ export class AdminService {
         completedProfileCount,
         incompleteProfileCount,
       },
-      recentRegistrations: recentRegistrations.map(r => ({
-        id: r.id,
-        email: r.email,
-        phoneNumber: r.phoneNumber,
-        role: r.role,
-        approvalStatus: r.approvalStatus,
-        status: r.status,
-        createdAt: r.createdAt,
-        name: r.profile?.name || r.name || null,
-        hasProfile: Boolean(r.profile),
-        city: r.profile?.city || null,
-        verified: r.profile?.verified || false,
-        avatarUrl: r.profile?.photos?.[0]?.secureUrl || null,
-      })),
+      recentRegistrations: recentRegistrations.map(r => {
+        const photoUrls = r.profile?.photos?.map((p: any) => p?.secureUrl || p) || [];
+        const isVerified = r.profile?.verified || false;
+        return {
+          id: r.id,
+          email: r.email,
+          phoneNumber: r.phoneNumber,
+          role: r.role,
+          approvalStatus: r.approvalStatus,
+          status: r.status,
+          createdAt: r.createdAt,
+          name: r.profile?.name || r.name || null,
+          hasProfile: Boolean(r.profile),
+          city: r.profile?.city || null,
+          verified: isVerified,
+          avatarUrl: photoUrls[0] || null,
+          photos: photoUrls,
+          profile: r.profile ? {
+            ...r.profile,
+            id: r.profile.id,
+            userId: r.id,
+            name: r.profile.name || r.name,
+            email: r.email,
+            phoneNumber: r.phoneNumber,
+            role: r.role,
+            status: r.status,
+            verified: isVerified,
+            photos: photoUrls,
+            promptAnswers: r.profile.promptAnswers || [],
+          } : null,
+        };
+      }),
     };
   }
 
@@ -336,6 +376,7 @@ export class AdminService {
             photos: {
               orderBy: { photoOrder: 'asc' },
             },
+            promptAnswers: true,
           },
         },
         verificationRequests: {
@@ -349,20 +390,37 @@ export class AdminService {
     });
 
     return {
-      users: users.map(u => ({
-        id: u.id,
-        email: u.email,
-        phoneNumber: u.phoneNumber,
-        role: u.role,
-        approvalStatus: u.approvalStatus,
-        status: u.status,
-        createdAt: u.createdAt,
-        name: u.profile?.name || u.name || null,
-        hasProfile: Boolean(u.profile),
-        city: u.profile?.city || null,
-        verified: Boolean(u.profile?.verified || (u.verificationRequests && u.verificationRequests.length > 0)),
-        photos: u.profile?.photos?.map((p: any) => p?.secureUrl || p) || [],
-      })),
+      users: users.map(u => {
+        const photoUrls = u.profile?.photos?.map((p: any) => p?.secureUrl || p) || [];
+        const isVerified = Boolean(u.profile?.verified || (u.verificationRequests && u.verificationRequests.length > 0));
+        return {
+          id: u.id,
+          email: u.email,
+          phoneNumber: u.phoneNumber,
+          role: u.role,
+          approvalStatus: u.approvalStatus,
+          status: u.status,
+          createdAt: u.createdAt,
+          name: u.profile?.name || u.name || null,
+          hasProfile: Boolean(u.profile),
+          city: u.profile?.city || null,
+          verified: isVerified,
+          photos: photoUrls,
+          profile: u.profile ? {
+            ...u.profile,
+            id: u.profile.id,
+            userId: u.id,
+            name: u.profile.name || u.name,
+            email: u.email,
+            phoneNumber: u.phoneNumber,
+            role: u.role,
+            status: u.status,
+            verified: isVerified,
+            photos: photoUrls,
+            promptAnswers: u.profile.promptAnswers || [],
+          } : null,
+        };
+      }),
       pagination: {
         total,
         page,
@@ -623,7 +681,7 @@ export class AdminService {
         user: {
           include: {
             profile: {
-              include: { photos: true },
+              include: { photos: true, promptAnswers: true },
             },
           },
         },
@@ -633,24 +691,53 @@ export class AdminService {
       },
     });
 
-    return requests.map(r => ({
-      id: r.id,
-      userId: r.userId,
-      userName: r.user?.profile?.name || 'Unknown',
-      userPhone: r.user?.phoneNumber || '—',
-      userCity: r.user?.profile?.city || null,
-      userGender: r.user?.profile?.gender || null,
-      selfieUrl: r.selfieUrl,
-      referenceUrl: r.referenceUrl,
-      profilePhotos: r.user?.profile?.photos?.map((p: any) => p?.secureUrl || p) || [],
-      autoFailReason: r.autoFailReason,
-      adminNotes: r.adminNotes,
-      status: r.status,
-      reviewedBy: r.reviewedBy,
-      reviewerName: r.reviewer?.profile?.name || null,
-      reviewedAt: r.reviewedAt,
-      createdAt: r.createdAt,
-    }));
+    return requests.map(r => {
+      const photoUrls = r.user?.profile?.photos?.map((p: any) => p?.secureUrl || p) || [];
+      const isVerified = Boolean(r.user?.profile?.verified || r.status === 'APPROVED');
+      return {
+        id: r.id,
+        userId: r.userId,
+        userName: r.user?.profile?.name || r.user?.name || 'Unknown',
+        userPhone: r.user?.phoneNumber || '—',
+        userCity: r.user?.profile?.city || null,
+        userGender: r.user?.profile?.gender || null,
+        selfieUrl: r.selfieUrl,
+        referenceUrl: r.referenceUrl,
+        profilePhotos: photoUrls,
+        autoFailReason: r.autoFailReason,
+        adminNotes: r.adminNotes,
+        status: r.status,
+        reviewedBy: r.reviewedBy,
+        reviewerName: r.reviewer?.profile?.name || null,
+        reviewedAt: r.reviewedAt,
+        createdAt: r.createdAt,
+        user: r.user ? {
+          id: r.user.id,
+          name: r.user.profile?.name || r.user.name,
+          email: r.user.email,
+          phoneNumber: r.user.phoneNumber,
+          role: r.user.role,
+          status: r.user.status,
+          verified: isVerified,
+          avatarUrl: photoUrls[0] || null,
+          photos: photoUrls,
+          hasProfile: Boolean(r.user.profile),
+          profile: r.user.profile ? {
+            ...r.user.profile,
+            id: r.user.profile.id,
+            userId: r.user.id,
+            name: r.user.profile.name || r.user.name,
+            email: r.user.email,
+            phoneNumber: r.user.phoneNumber,
+            role: r.user.role,
+            status: r.user.status,
+            verified: isVerified,
+            photos: photoUrls,
+            promptAnswers: r.user.profile.promptAnswers || [],
+          } : null,
+        } : null,
+      };
+    });
   }
 
   async approveVerification(requestId: string, adminId: string, notes?: string) {
