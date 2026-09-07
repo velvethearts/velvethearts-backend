@@ -159,4 +159,51 @@ export class ProfileController {
       return res.status(500).json({ success: false, message: 'Photo verification failed' });
     }
   };
+
+  submitManualVerification = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { selfie, referenceUrl, autoFailReason } = req.body;
+      if (!selfie) {
+        return res.status(400).json({ success: false, message: 'Selfie image is required' });
+      }
+
+      const result = await this.profileService.submitVerificationRequest(req.user.userId, {
+        selfie,
+        referenceUrl,
+        autoFailReason,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.alreadyPending
+          ? 'You already have a pending verification request. Our team will review it shortly.'
+          : 'Your verification request has been submitted for manual review.',
+        data: result,
+      });
+    } catch (error: any) {
+      logger.error('submitManualVerification controller failure:', error);
+      return res.status(500).json({ success: false, message: 'Submitting manual verification failed' });
+    }
+  };
+
+  getVerificationStatus = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const status = await this.profileService.getVerificationStatus(req.user.userId);
+      return res.status(200).json({
+        success: true,
+        data: status,
+      });
+    } catch (error: any) {
+      logger.error('getVerificationStatus controller failure:', error);
+      return res.status(500).json({ success: false, message: 'Retrieving verification status failed' });
+    }
+  };
 }

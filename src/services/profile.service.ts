@@ -360,4 +360,44 @@ export class ProfileService {
       return { verified: true };
     }
   }
+
+  async submitVerificationRequest(userId: string, data: { selfie: string; referenceUrl?: string; autoFailReason?: string }) {
+    // Check if there's already a pending request for this user
+    const existingPending = await prisma.verificationRequest.findFirst({
+      where: { userId, status: 'PENDING' },
+    });
+
+    if (existingPending) {
+      logger.info(`[ProfileService] User ${userId} already has a pending verification request (${existingPending.id})`);
+      return { requestId: existingPending.id, alreadyPending: true };
+    }
+
+    const request = await prisma.verificationRequest.create({
+      data: {
+        userId,
+        selfieUrl: data.selfie,
+        referenceUrl: data.referenceUrl || null,
+        autoFailReason: data.autoFailReason || null,
+      },
+    });
+
+    logger.info(`[ProfileService] User ${userId} submitted manual verification request (${request.id})`);
+    return { requestId: request.id, alreadyPending: false };
+  }
+
+  async getVerificationStatus(userId: string) {
+    const latest = await prisma.verificationRequest.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        adminNotes: true,
+        createdAt: true,
+        reviewedAt: true,
+      },
+    });
+
+    return latest || null;
+  }
 }

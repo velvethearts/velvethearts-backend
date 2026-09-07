@@ -1,6 +1,6 @@
 import { UserRepository } from '../repositories/user.repository';
 import { ActivityLogRepository } from '../repositories/activity-log.repository';
-import { ApprovalStatus, UserStatus, ReportStatus, Role } from '@prisma/client';
+import { ApprovalStatus, UserStatus, ReportStatus, Role, VerificationRequestStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 
 export class AdminService {
@@ -402,5 +402,117 @@ export class AdminService {
         pages: Math.ceil(total / limit) || 1,
       },
     };
+  }
+
+  // ============================================
+  // VERIFICATION REQUEST REVIEW (Admin Panel)
+  // ============================================
+
+  async getVerificationRequests(status?: VerificationRequestStatus) {
+    const requests = await prisma.verificationRequest.findMany({
+      where: status ? { status } : undefined,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          include: {
+            profile: {
+              include: { photos: true },
+            },
+          },
+        },
+        reviewer: {
+          include: { profile: true },
+        },
+      },
+    });
+
+    return requests.map(r => ({
+      id: r.id,
+      userId: r.userId,
+      userName: r.user.profile?.name || 'Unknown',
+      userPhone: r.user.phoneNumber,
+      userCity: r.user.profile?.city || null,
+      userGender: r.user.profile?.gender || null,
+      selfieUrl: r.selfieUrl,
+      referenceUrl: r.referenceUrl,
+      profilePhotos: r.user.profile?.photos.map((p: any) => p.secureUrl) || [],
+      autoFailReason: r.autoFailReason,
+      adminNotes: r.adminNotes,
+      status: r.status,
+      reviewedBy: r.reviewedBy,
+      reviewerName: r.reviewer?.profile?.name || null,
+      reviewedAt: r.reviewedAt,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  async approveVerification(requestId: string, adminId: string, notes?: string) {
+    const request = await prisma.verificationRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!request) throw new Error('Verification request not found');
+    if (request.status !== 'PENDING') throw new Error('Request already reviewed');
+
+    await prisma.$transaction(async (tx) => {
+      // Update the verification request
+      await tx.verificationRequest.update({
+        where: { id: requestId },
+        data: {
+          status: VerificationRequestStatus.APPROVED,
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          adminNotes: notes || null,
+        },
+      });
+
+      // Set the user's profile as verified
+      const profile = await tx.profile.findUnique({
+        where: { userId: request.userId },
+      });
+      if (profile) {
+        await tx.profile.update({
+          where: { userId: request.userId },
+          data: { verified: true },
+        });
+      }
+    });
+
+    await this.logRepository.create({
+      userId: request.userId,
+      adminId,
+      action: 'VERIFICATION_APPROVED',
+      details: JSON.stringify({ requestId, notes: notes || 'No notes' }),
+    });
+
+    return { success: true };
+  }
+
+  async rejectVerification(requestId: string, adminId: string, notes?: string) {
+    const request = await prisma.verificationRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!request) throw new Error('Verification request not found');
+    if (request.status !== 'PENDING') throw new Error('Request already reviewed');
+
+    await prisma.verificationRequest.update({
+      where: { id: requestId },
+      data: {
+        status: VerificationRequestStatus.REJECTED,
+        reviewedBy: adminId,
+        reviewedAt: new Date(),
+        adminNotes: notes || null,
+      },
+    });
+
+    await this.logRepository.create({
+      userId: request.userId,
+      adminId,
+      action: 'VERIFICATION_REJECTED',
+      details: JSON.stringify({ requestId, notes: notes || 'No notes' }),
+    });
+
+    return { success: true };
   }
 }

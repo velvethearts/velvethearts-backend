@@ -45,6 +45,8 @@ model User {
   settings        UserSettings?
   pushSubscriptions PushSubscription[]
   diaryEntries    DiaryEntry[]              @relation("DiaryEntriesSaved")
+  verificationRequests  VerificationRequest[]
+  reviewedVerifications VerificationRequest[] @relation("VerificationReviewer")
 
   @@index([phoneNumber, status])
   @@index([email, status])
@@ -392,5 +394,29 @@ model DiaryEntry {
 
   @@index([matchId, createdAt])
   @@index([savedByUserId])
+}
+
+enum VerificationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model VerificationRequest {
+  id             String                      @id @default(uuid())
+  userId         String
+  selfieUrl      String
+  referenceUrl   String?
+  autoFailReason String?
+  adminNotes     String?
+  status         VerificationRequestStatus   @default(PENDING)
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime                    @default(now())
+  user           User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer       User?                       @relation("VerificationReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([status, createdAt])
+  @@index([userId])
 }
 

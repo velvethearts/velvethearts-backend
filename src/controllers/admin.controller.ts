@@ -3,7 +3,7 @@ import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { AdminService } from '../services/admin.service';
 import { logger } from '../utils/logger';
 import { z } from 'zod';
-import { ReportStatus, UserStatus, Role } from '@prisma/client';
+import { ReportStatus, UserStatus, Role, VerificationRequestStatus } from '@prisma/client';
 
 const approveRejectSchema = z.object({
   userId: z.string().uuid('Invalid user ID format'),
@@ -31,6 +31,11 @@ const auditLogQuerySchema = z.object({
 // [H-9 FIX] Zod schema for report status filter
 const reportStatusSchema = z.object({
   status: z.nativeEnum(ReportStatus).optional(),
+});
+
+// Zod schema for verification request status filter
+const verificationStatusSchema = z.object({
+  status: z.nativeEnum(VerificationRequestStatus).optional(),
 });
 
 export class AdminController {
@@ -302,6 +307,69 @@ export class AdminController {
     } catch (error: any) {
       logger.error('getAuditLogs controller failure:', error);
       return res.status(500).json({ success: false, message: 'Retrieving audit logs failed' });
+    }
+  };
+
+  // ============================================
+  // VERIFICATION REQUEST REVIEW
+  // ============================================
+
+  getVerificationRequests = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const parsed = verificationStatusSchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: 'Invalid verification status filter' });
+      }
+      const requests = await this.adminService.getVerificationRequests(parsed.data.status);
+      return res.status(200).json({
+        success: true,
+        data: requests,
+      });
+    } catch (error: any) {
+      logger.error('getVerificationRequests controller failure:', error);
+      return res.status(500).json({ success: false, message: 'Retrieving verification requests failed' });
+    }
+  };
+
+  approveVerification = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { id } = req.params;
+      const { notes } = req.body;
+
+      await this.adminService.approveVerification(id, req.user.userId, notes);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Verification request approved successfully',
+      });
+    } catch (error: any) {
+      logger.error('approveVerification controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Approving verification failed' });
+    }
+  };
+
+  rejectVerification = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { id } = req.params;
+      const { notes } = req.body;
+
+      await this.adminService.rejectVerification(id, req.user.userId, notes);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Verification request rejected',
+      });
+    } catch (error: any) {
+      logger.error('rejectVerification controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Rejecting verification failed' });
     }
   };
 }

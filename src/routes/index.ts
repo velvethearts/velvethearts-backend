@@ -67,6 +67,8 @@ router.get('/profile/settings', requireAuth, profileCtrl.getSettings);
 router.put('/profile/settings', requireAuth, profileMutationLimiter, profileCtrl.updateSettings);
 router.post('/profile', requireAuth, profileMutationLimiter, profileCtrl.saveProfile);
 router.post('/profile/verify-photo', requireAuth, photoVerifyRateLimiter, profileCtrl.verifyPhoto);
+router.post('/profile/verify-manual', requireAuth, photoVerifyRateLimiter, profileCtrl.submitManualVerification);
+router.get('/profile/verification-status', requireAuth, profileCtrl.getVerificationStatus);
 router.delete('/profile', requireAuth, accountDeleteLimiter, profileCtrl.deleteAccount);
 
 // ==========================================
@@ -162,6 +164,9 @@ router.get('/admin/users/history', requireAuth, requireRole(['ADMIN', 'SUPER_ADM
 router.get('/admin/reports', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getReports);
 router.post('/admin/reports/:reportId/close', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.closeReport);
 router.get('/admin/logs', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getAuditLogs);
+router.get('/admin/verifications', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getVerificationRequests);
+router.post('/admin/verifications/:id/approve', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.approveVerification);
+router.post('/admin/verifications/:id/reject', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.rejectVerification);
 
 // SUPER ADMIN ONLY OPERATIONS
 router.post('/admin/create', requireAuth, requireRole(['SUPER_ADMIN']), adminPrivilegeLimiter, adminCtrl.createAdmin);
