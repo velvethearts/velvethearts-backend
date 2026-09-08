@@ -378,59 +378,66 @@ export class ProfileService {
   }
 
   async verifyUserPhoto(userId: string, data: { selfie: string; poseId?: string; referenceUrl?: string }) {
-    try {
-      const existingProfile = await prisma.profile.findFirst({
-        where: {
-          OR: [{ userId }, { id: userId }],
+    const existingProfile = await prisma.profile.findFirst({
+      where: {
+        OR: [{ userId }, { id: userId }],
+      },
+      include: { photos: { orderBy: { photoOrder: 'asc' }, take: 1 } },
+    });
+
+    const referenceUrl = data.referenceUrl || (existingProfile as any)?.photos?.[0]?.secureUrl || undefined;
+
+    // Check if there's already a pending request for this user
+    const existingPending = await prisma.verificationRequest.findFirst({
+      where: { userId, status: 'PENDING' },
+    });
+
+    let requestId: string;
+
+    if (existingPending) {
+      const updated = await prisma.verificationRequest.update({
+        where: { id: existingPending.id },
+        data: {
+          selfieUrl: data.selfie,
+          referenceUrl: referenceUrl || existingPending.referenceUrl,
+          createdAt: new Date(),
         },
-        include: { photos: { orderBy: { photoOrder: 'asc' }, take: 1 } },
       });
-
-      const referenceUrl = data.referenceUrl || (existingProfile as any)?.photos?.[0]?.secureUrl || undefined;
-
-      // Check if there's already a pending request for this user
-      const existingPending = await prisma.verificationRequest.findFirst({
-        where: { userId, status: 'PENDING' },
+      requestId = updated.id;
+      logger.info(`[ProfileService] User ${userId} updated pending verification request (${requestId})`);
+    } else {
+      const request = await prisma.verificationRequest.create({
+        data: {
+          userId,
+          selfieUrl: data.selfie,
+          referenceUrl: referenceUrl || null,
+        },
       });
-
-      let requestId: string;
-
-      if (existingPending) {
-        const updated = await prisma.verificationRequest.update({
-          where: { id: existingPending.id },
-          data: {
-            selfieUrl: data.selfie,
-            referenceUrl: referenceUrl || existingPending.referenceUrl,
-          },
-        });
-        requestId = updated.id;
-        logger.info(`[ProfileService] User ${userId} updated pending verification request (${requestId})`);
-      } else {
-        const request = await prisma.verificationRequest.create({
-          data: {
-            userId,
-            selfieUrl: data.selfie,
-            referenceUrl: referenceUrl || null,
-          },
-        });
-        requestId = request.id;
-        logger.info(`[ProfileService] User ${userId} submitted verification request for admin review (${requestId})`);
-      }
-
-      return {
-        verified: false,
-        status: 'PENDING',
-        requestId,
-        message: 'Verification selfie submitted. An administrator will review your photo shortly.',
-      };
-    } catch (err: any) {
-      logger.warn(`[ProfileService] verifyUserPhoto warning: ${err.message}`);
-      return {
-        verified: false,
-        status: 'PENDING',
-        message: 'Verification request queued for admin review.',
-      };
+      requestId = request.id;
+      logger.info(`[ProfileService] User ${userId} submitted verification request for admin review (${requestId})`);
     }
+
+    // Notify admins in real time via Socket.IO
+    try {
+      const { io } = await import('../socket');
+      if (io) {
+        io.to('admins').emit('verification_request_submitted', {
+          requestId,
+          userId,
+          status: 'PENDING',
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (socketErr) {
+      logger.warn('[ProfileService] Failed emitting verification_request_submitted socket event:', socketErr);
+    }
+
+    return {
+      verified: false,
+      status: 'PENDING',
+      requestId,
+      message: 'Verification selfie submitted. An administrator will review your photo shortly.',
+    };
   }
 
   async submitVerificationRequest(userId: string, data: { selfie: string; referenceUrl?: string; autoFailReason?: string }) {
@@ -439,22 +446,49 @@ export class ProfileService {
       where: { userId, status: 'PENDING' },
     });
 
+    let requestId: string;
+
     if (existingPending) {
-      logger.info(`[ProfileService] User ${userId} already has a pending verification request (${existingPending.id})`);
-      return { requestId: existingPending.id, alreadyPending: true };
+      const updated = await prisma.verificationRequest.update({
+        where: { id: existingPending.id },
+        data: {
+          selfieUrl: data.selfie,
+          referenceUrl: data.referenceUrl || existingPending.referenceUrl,
+          autoFailReason: data.autoFailReason || existingPending.autoFailReason,
+          createdAt: new Date(),
+        },
+      });
+      requestId = updated.id;
+      logger.info(`[ProfileService] User ${userId} updated pending verification request (${requestId})`);
+    } else {
+      const request = await prisma.verificationRequest.create({
+        data: {
+          userId,
+          selfieUrl: data.selfie,
+          referenceUrl: data.referenceUrl || null,
+          autoFailReason: data.autoFailReason || null,
+        },
+      });
+      requestId = request.id;
+      logger.info(`[ProfileService] User ${userId} submitted manual verification request (${request.id})`);
     }
 
-    const request = await prisma.verificationRequest.create({
-      data: {
-        userId,
-        selfieUrl: data.selfie,
-        referenceUrl: data.referenceUrl || null,
-        autoFailReason: data.autoFailReason || null,
-      },
-    });
+    // Notify admins in real time via Socket.IO
+    try {
+      const { io } = await import('../socket');
+      if (io) {
+        io.to('admins').emit('verification_request_submitted', {
+          requestId,
+          userId,
+          status: 'PENDING',
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (socketErr) {
+      logger.warn('[ProfileService] Failed emitting verification_request_submitted socket event:', socketErr);
+    }
 
-    logger.info(`[ProfileService] User ${userId} submitted manual verification request (${request.id})`);
-    return { requestId: request.id, alreadyPending: false };
+    return { requestId, alreadyPending: Boolean(existingPending) };
   }
 
   async getVerificationStatus(userId: string) {

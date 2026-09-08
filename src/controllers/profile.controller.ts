@@ -143,12 +143,19 @@ export class ProfileController {
         return res.status(401).json({ success: false, message: 'Authentication required' });
       }
 
-      const { selfie, poseId } = req.body;
+      let body = req.body;
+      if (typeof body === 'string') {
+        try {
+          body = JSON.parse(body);
+        } catch (_) {}
+      }
+
+      const { selfie, poseId, referenceUrl } = body || {};
       if (!selfie) {
         return res.status(400).json({ success: false, message: 'Selfie image is required for verification' });
       }
 
-      const result = await this.profileService.verifyUserPhoto(req.user.userId, { selfie, poseId });
+      const result = await this.profileService.verifyUserPhoto(req.user.userId, { selfie, poseId, referenceUrl });
       return res.status(200).json({
         success: true,
         message: 'Your profile has been verified successfully',
@@ -166,7 +173,14 @@ export class ProfileController {
         return res.status(401).json({ success: false, message: 'Authentication required' });
       }
 
-      const { selfie, referenceUrl, autoFailReason } = req.body;
+      let body = req.body;
+      if (typeof body === 'string') {
+        try {
+          body = JSON.parse(body);
+        } catch (_) {}
+      }
+
+      const { selfie, referenceUrl, autoFailReason } = body || {};
       if (!selfie) {
         return res.status(400).json({ success: false, message: 'Selfie image is required' });
       }
