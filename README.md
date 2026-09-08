@@ -1,6 +1,6 @@
 # Velvet Hearts Backend
 
-Last updated: August 12th, 2026 (v1.0.0 Release)  
+Last updated: September 8th, 2026 (v1.2.0 Release)  
 Source of truth: `/docs/Administrator_Manual.docx` and `/docs/User_Manual.docx`
 
 This folder contains the Velvet Hearts backend service. It is a TypeScript Express application that provides REST APIs, authentication token issuance, approval enforcement, admin workflows, moderation workflows, Cloudinary upload brokering, Prisma database access, and Socket.IO realtime behavior.
@@ -19,14 +19,14 @@ The backend is the application authority for users, roles, approval status, acco
 | `src/middlewares/auth.middleware.ts` | App JWT validation, deleted/suspended account blocking, approval checks, and role checks. |
 | `src/middlewares/rate-limiter.middleware.ts` | Rate limiters for auth, likes, chat, reports, search, and discover. |
 | `src/middlewares/error.middleware.ts` | Central error response handling. |
-| `src/controllers` | HTTP request/response layer. |
-| `src/services` | Business logic for auth, profile (including `sparkNote` update logic), discover, match (returning `sparkNote` for active connections), chat, safety, admin, upload, search, and notifications. |
+| `src/controllers` | HTTP request/response layer (including admin warnings and photo verification). |
+| `src/services` | Business logic for auth, profile (including `sparkNote` update logic), discover/search (with Indian States & geodesic distance calculation), match, chat, safety/verification, admin warnings, upload, and notifications. |
 | `src/repositories` | Database access helpers around Prisma models. |
-| `src/socket.ts` | Socket.IO server setup, JWT socket authentication, conversation rooms, and typing events. |
+| `src/socket.ts` | Socket.IO server setup, JWT socket authentication, conversation rooms, typing events, and admin real-time alerts (`admin_warning_updated`). |
 | `src/utils/jwt.ts` | Access/refresh token generation and verification. |
 | `src/utils/logger.ts` | Winston logger setup. |
-| `src/validators` | Zod request validation schemas (including `sparkNote` 20-character limit validation). |
-| `prisma/schema.prisma` | PostgreSQL schema, Prisma models (with `sparkNote` & `sparkNoteUpdatedAt` fields), relationships, and enums. |
+| `src/validators` | Zod request validation schemas (including `sparkNote` limits and warning validation schemas). |
+| `prisma/schema.prisma` | PostgreSQL schema, Prisma models (with `sparkNote`, `verified`, and admin warning fields), relationships, and enums. |
 | `prisma/migrations` | Prisma migration history. |
 | `package.json` | Scripts and backend dependencies. |
 | `tsconfig.json` | TypeScript compiler configuration. |
@@ -301,22 +301,30 @@ All routes are mounted under:
 | Auth | `POST /auth/refresh` | Public with refresh token | Rotate app JWTs. |
 | Auth | `POST /auth/logout` | User | Log logout event. |
 | Profile | `GET /profile/me` | User | Fetch own user/profile data. |
-| Profile | `POST /profile` | User | Create/update profile. |
+| Profile | `POST /profile` | User | Create/update profile (supports `voiceIntroUrl`, `sparkNote`, and reverifies photo consistency). |
 | Profile | `DELETE /profile` | User | Soft-delete own account. |
-| Discover | `GET /discover` | Approved user | Discover recommendations (parallelized exclusions via `Promise.all`). |
-| Search | `GET /search` | Approved user | Profile search. |
+| Discover | `GET /discover` | Approved user | Discover recommendations (geodesic distance engine, Indian States dataset, parallelized exclusions). |
+| Search | `GET /search` | Approved user | Profile search with state/city and interest filtering. |
 | Match | `POST /match/like` | Approved user | Send interest (validates target active status). |
 | Match | `POST /match/unlike` | Approved user | Undo interest. |
 | Match | `POST /match/unmatch` | Approved user | End match. |
 | Match | `GET /match/connections` | Approved user | Mutual connections (filters out deleted/inactive partners). |
 | Safety | `POST /block` | User | Block user. |
 | Safety | `POST /safety/reports` | User | Report user and auto-block. |
+| Safety | `POST /safety/verify` | User | Submit live pose selfie for photo verification. |
 | Chat | `GET /chat/conversations` | Approved user | Conversation list (filters out deleted/inactive partners). |
 | Chat | `GET /chat/conversations/:conversationId/messages` | Approved user | Message history. |
 | Chat | `POST /chat/conversations/:conversationId/messages` | Approved user | Send message (non-blocking background Web Push dispatch). |
-| Upload | `POST /upload` | User | Upload profile/media image. |
+| Upload | `POST /upload` | User | Upload profile/media image or voice note snippet. |
 | Notifications | `GET /notifications` | User | Notification list. |
-| Admin | `/admin/*` | Admin/Super Admin | Admin operations. |
+| Admin | `GET /admin/warnings` | Admin | List all compliance warnings, statuses, and user appeals. |
+| Admin | `POST /admin/warnings` | Admin | Issue compliance warning with preset violation rules and 24h deadline. |
+| Admin | `POST /admin/warnings/:id/resolve` | Admin | Resolve warning (dismiss or uphold penalty). |
+| Admin | `POST /admin/warnings/:id/appeal` | User | Submit appeal with optional proof image attachments. |
+| Admin | `GET /admin/verification-requests` | Admin | List pending photo verification submissions. |
+| Admin | `POST /admin/verification-requests/:id/approve` | Admin | Approve photo verification request and award verified badge. |
+| Admin | `POST /admin/verification-requests/:id/reject` | Admin | Reject photo verification request with feedback. |
+| Admin | `/admin/*` | Admin/Super Admin | Admin dashboard stats, user directory, pending registration queue, audit history. |
 
 Admin-specific routes include dashboard stats, user listing, pending queue, approve/reject, phone history, reports, audit logs, suspend/restore, and super-admin-only admin creation/removal.
 
@@ -338,6 +346,8 @@ Supported events:
 | `leave_conversation` | Client → server | Leave a conversation room. |
 | `typing_start` | Client → server → room peers | Broadcast typing active state. |
 | `typing_stop` | Client → server → room peers | Broadcast typing inactive state. |
+| `admin_warning_updated` | Server → client / admin room | Real-time broadcast when a warning is issued, appealed, or resolved. |
+| `verification_request_created` | Server → admin room | Real-time notification when a user submits a pose selfie verification. |
 
 ## Upload flow
 
@@ -358,10 +368,12 @@ Cloudinary API secret must stay backend-only.
 
 Admin users can:
 
-- View dashboard stats.
-- Review pending users.
+- View dashboard stats and real-time metrics.
+- Review pending user registrations.
 - Approve users.
 - Reject users.
+- **Photo Verification Management**: Review submitted pose selfies against approved primary profile photos; grant or deny verified status. If a user subsequently changes their primary photo to an unapproved picture, verified status is automatically revoked.
+- **Compliance Warning System**: Issue formal warnings with severity levels (`LOW`, `MEDIUM`, `HIGH`) and 24-hour compliance windows; review appeal submissions with proof images; dismiss or resolve warnings with socket broadcasts.
 - View phone/audit history.
 - Query users.
 - Suspend and restore users.
