@@ -96,6 +96,19 @@ export class WarningService {
 
     logger.info(`[WarningService] Appeal submitted by user ${userId} for warning ${warningId} with ${appealPhotos?.length || 0} photo(s).`);
 
+    try {
+      const { io } = await import('../socket');
+      if (io) {
+        io.emit('admin_warning_updated', {
+          warningId,
+          userId,
+          status: 'APPEALED',
+        });
+      }
+    } catch (err) {
+      logger.warn('Failed to emit admin_warning_updated on appeal:', err);
+    }
+
     return updated;
   }
 }

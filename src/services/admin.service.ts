@@ -924,6 +924,13 @@ export class AdminService {
           expiresAt,
           autoSuspend,
         });
+
+        // Broadcast to admin control centers so warnings tab updates in real-time
+        io.emit('admin_warning_updated', {
+          warningId: warning.id,
+          userId,
+          status: 'ACTIVE',
+        });
       }
     } catch (err) {
       logger.warn('Failed to emit warning_issued socket event:', err);
@@ -1177,6 +1184,18 @@ export class AdminService {
           details: JSON.stringify({ warningId, newExpiresAt, note }),
         },
       });
+    }
+
+    try {
+      const { io } = await import('../socket');
+      if (io) {
+        io.emit('admin_warning_updated', {
+          warningId,
+          action,
+        });
+      }
+    } catch (err) {
+      logger.warn('Failed to emit admin_warning_updated socket event on resolve:', err);
     }
 
     return { success: true };
