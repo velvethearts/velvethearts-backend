@@ -15,6 +15,7 @@ import { NotificationController } from '../controllers/notification.controller';
 import { PushController } from '../controllers/push.controller';
 import { RewindLetterController } from '../controllers/rewind-letter.controller';
 import { DiaryController } from '../controllers/diary.controller';
+import { WarningController } from '../controllers/warning.controller';
 
 // Middlewares
 import { requireAuth, requireRole } from '../middlewares/auth.middleware';
@@ -52,6 +53,7 @@ const notifCtrl = new NotificationController();
 const pushCtrl = new PushController();
 const rewindLetterCtrl = new RewindLetterController();
 const diaryCtrl = new DiaryController();
+const warningCtrl = new WarningController();
 
 // ==========================================
 // AUTH ROUTES
@@ -151,6 +153,12 @@ router.post('/push/subscribe', requireAuth, pushRateLimiter, pushCtrl.subscribe)
 router.post('/push/unsubscribe', requireAuth, pushRateLimiter, pushCtrl.unsubscribe);
 
 // ==========================================
+// WARNING & APPEAL ROUTES (User)
+// ==========================================
+router.get('/warnings/active', requireAuth, warningCtrl.getActiveWarning);
+router.post('/warnings/:warningId/appeal', requireAuth, warningCtrl.submitAppeal);
+
+// ==========================================
 // ADMIN DASHBOARD ROUTES
 // ==========================================
 router.get('/admin/stats', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getDashboardStats);
@@ -171,8 +179,14 @@ router.post('/admin/verifications/:id/approve', requireAuth, requireRole(['ADMIN
 router.post('/admin/verifications/:id/reject', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.rejectVerification);
 router.post('/admin/users/:userId/verify', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.toggleUserVerification);
 
+// Admin Warning Management
+router.post('/admin/users/:userId/warn', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.issueWarning);
+router.get('/admin/warnings', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getWarnings);
+router.post('/admin/warnings/:warningId/resolve', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.resolveWarning);
+
 // SUPER ADMIN ONLY OPERATIONS
 router.post('/admin/create', requireAuth, requireRole(['SUPER_ADMIN']), adminPrivilegeLimiter, adminCtrl.createAdmin);
 router.post('/admin/remove', requireAuth, requireRole(['SUPER_ADMIN']), adminPrivilegeLimiter, adminCtrl.removeAdmin);
 
 export default router;
+

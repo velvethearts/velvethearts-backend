@@ -47,6 +47,8 @@ model User {
   diaryEntries    DiaryEntry[]              @relation("DiaryEntriesSaved")
   verificationRequests  VerificationRequest[]
   reviewedVerifications VerificationRequest[] @relation("VerificationReviewer")
+  warningsReceived      AdminWarning[]
+  warningsIssued        AdminWarning[]        @relation("AdminWarningsIssued")
 
   @@index([phoneNumber, status])
   @@index([email, status])
@@ -418,5 +420,30 @@ model VerificationRequest {
 
   @@index([status, createdAt])
   @@index([userId])
+}
+
+model AdminWarning {
+  id             String    @id @default(uuid())
+  userId         String
+  adminId        String?
+  violationType  String    // 'PHOTO', 'NAME', 'TERMS', 'CUSTOM'
+  message        String
+  snapshotValue  String?   // JSON string of name or photos at warning time
+  deadlineHours  Int       @default(24)
+  expiresAt      DateTime
+  autoSuspend    Boolean   @default(true)
+  status         String    @default("ACTIVE") // 'ACTIVE', 'RESOLVED', 'APPEALED', 'EXPIRED', 'DISMISSED', 'SUSPENDED'
+  appealText     String?
+  appealPhotos   String[]  @default([])
+  appealedAt     DateTime?
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  resolutionNote String?
+  createdAt      DateTime  @default(now())
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  admin          User?     @relation("AdminWarningsIssued", fields: [adminId], references: [id])
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
 }
 

@@ -834,4 +834,351 @@ export class AdminService {
 
     return { success: true };
   }
+
+  // ============================================
+  // ADMIN WARNING SYSTEM
+  // ============================================
+
+  async issueWarning(
+    userId: string,
+    adminId: string,
+    data: { violationType: string; message: string; deadlineHours?: number; autoSuspend?: boolean }
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        profile: {
+          include: {
+            photos: { orderBy: { photoOrder: 'asc' } },
+          },
+        },
+      },
+    });
+
+    if (!user) throw new Error('User not found');
+
+    const photoUrls = user.profile?.photos?.map((p: any) => p?.secureUrl || p) || [];
+    const snapshot = {
+      name: user.profile?.name || user.name || '',
+      photos: photoUrls,
+      verified: Boolean(user.profile?.verified),
+    };
+
+    const deadlineHours = data.deadlineHours || 24;
+    const expiresAt = new Date(Date.now() + deadlineHours * 60 * 60 * 1000);
+    const autoSuspend = data.autoSuspend !== undefined ? Boolean(data.autoSuspend) : true;
+
+    const warning = await prisma.adminWarning.create({
+      data: {
+        userId,
+        adminId,
+        violationType: data.violationType || 'POLICY',
+        message: data.message,
+        snapshotValue: JSON.stringify(snapshot),
+        deadlineHours,
+        expiresAt,
+        autoSuspend,
+        status: 'ACTIVE',
+      },
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        userId,
+        adminId,
+        action: 'ADMIN_ISSUE_WARNING',
+        details: JSON.stringify({
+          warningId: warning.id,
+          violationType: data.violationType,
+          deadlineHours,
+          autoSuspend,
+          message: data.message,
+        }),
+      },
+    });
+
+    // Create in-app notification
+    try {
+      await prisma.notification.create({
+        data: {
+          userId,
+          type: 'ADMIN_NOTICE',
+          title: '⚠️ Profile Compliance Notice',
+          content: data.message,
+          relatedId: warning.id,
+        },
+      });
+    } catch (notifErr) {
+      logger.warn('Failed to create warning notification:', notifErr);
+    }
+
+    // Real-time socket event
+    try {
+      const { io } = await import('../socket');
+      if (io) {
+        io.to(userId).emit('warning_issued', {
+          warningId: warning.id,
+          violationType: warning.violationType,
+          message: warning.message,
+          deadlineHours,
+          expiresAt,
+          autoSuspend,
+        });
+      }
+    } catch (err) {
+      logger.warn('Failed to emit warning_issued socket event:', err);
+    }
+
+    return warning;
+  }
+
+  async getWarnings(statusFilter?: string) {
+    // 1. Check open warnings for compliance updates or auto-suspension
+    const openWarnings = await prisma.adminWarning.findMany({
+      where: {
+        status: { in: ['ACTIVE', 'APPEALED'] },
+      },
+      include: {
+        user: {
+          include: {
+            profile: {
+              include: { photos: { orderBy: { photoOrder: 'asc' } } },
+            },
+          },
+        },
+      },
+    });
+
+    for (const warning of openWarnings) {
+      let snapshot: any = null;
+      try {
+        snapshot = JSON.parse(warning.snapshotValue || '{}');
+      } catch {}
+
+      const currentName = warning.user?.profile?.name || warning.user?.name || '';
+      const currentPhotos = warning.user?.profile?.photos?.map((p: any) => p.secureUrl || p) || [];
+
+      let nameChanged = false;
+      let photosChanged = false;
+
+      if (snapshot?.name && currentName && snapshot.name !== currentName) {
+        nameChanged = true;
+      }
+      if (snapshot?.photos && Array.isArray(snapshot.photos)) {
+        const snapSet = new Set(snapshot.photos);
+        if (currentPhotos.length !== snapshot.photos.length || currentPhotos.some(url => !snapSet.has(url))) {
+          photosChanged = true;
+        }
+      }
+
+      // Auto-resolve if user complied
+      if (warning.status === 'ACTIVE' && warning.violationType === 'NAME' && nameChanged) {
+        await prisma.adminWarning.update({
+          where: { id: warning.id },
+          data: {
+            status: 'RESOLVED',
+            resolvedAt: new Date(),
+            resolutionNote: `User updated name from "${snapshot.name}" to "${currentName}". Auto-resolved.`,
+          },
+        });
+        continue;
+      }
+
+      if (warning.status === 'ACTIVE' && warning.violationType === 'PHOTO' && photosChanged) {
+        await prisma.adminWarning.update({
+          where: { id: warning.id },
+          data: {
+            status: 'RESOLVED',
+            resolvedAt: new Date(),
+            resolutionNote: 'User updated profile photos. Auto-resolved.',
+          },
+        });
+        continue;
+      }
+
+      // Auto-suspend expired warnings if user hasn't appealed (status === 'ACTIVE' only)
+      if (
+        warning.status === 'ACTIVE' &&
+        warning.autoSuspend &&
+        new Date() > warning.expiresAt
+      ) {
+        await prisma.user.update({
+          where: { id: warning.userId },
+          data: { status: UserStatus.SUSPENDED },
+        });
+
+        await prisma.adminWarning.update({
+          where: { id: warning.id },
+          data: {
+            status: 'SUSPENDED',
+            resolvedAt: new Date(),
+            resolutionNote: 'Deadline passed without compliance. Auto-suspended by system.',
+          },
+        });
+
+        await prisma.activityLog.create({
+          data: {
+            userId: warning.userId,
+            action: 'AUTO_SUSPEND_EXPIRED_WARNING',
+            details: JSON.stringify({ warningId: warning.id, deadlineHours: warning.deadlineHours }),
+          },
+        });
+      }
+    }
+
+    // 2. Fetch all warnings with enriched data
+    const warnings = await prisma.adminWarning.findMany({
+      where: statusFilter ? { status: statusFilter } : undefined,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          include: {
+            profile: {
+              include: { photos: { orderBy: { photoOrder: 'asc' } } },
+            },
+          },
+        },
+        admin: {
+          include: { profile: true },
+        },
+      },
+    });
+
+    return warnings.map(w => {
+      let snapshot: any = null;
+      try {
+        snapshot = JSON.parse(w.snapshotValue || '{}');
+      } catch {}
+
+      const currentName = w.user?.profile?.name || w.user?.name || '';
+      const currentPhotos = w.user?.profile?.photos?.map((p: any) => p.secureUrl || p) || [];
+
+      let nameChanged = false;
+      let photosChanged = false;
+
+      if (snapshot?.name && currentName && snapshot.name !== currentName) {
+        nameChanged = true;
+      }
+      if (snapshot?.photos && Array.isArray(snapshot.photos)) {
+        const snapSet = new Set(snapshot.photos);
+        if (currentPhotos.length !== snapshot.photos.length || currentPhotos.some(url => !snapSet.has(url))) {
+          photosChanged = true;
+        }
+      }
+
+      const isExpired = new Date() > w.expiresAt;
+      const remainingMs = Math.max(0, w.expiresAt.getTime() - Date.now());
+
+      return {
+        id: w.id,
+        userId: w.userId,
+        userName: currentName || 'Member',
+        userEmail: w.user?.email || null,
+        userPhone: w.user?.phoneNumber || null,
+        userStatus: w.user?.status,
+        adminId: w.adminId,
+        adminName: w.admin?.profile?.name || w.admin?.name || 'Admin',
+        violationType: w.violationType,
+        message: w.message,
+        deadlineHours: w.deadlineHours,
+        expiresAt: w.expiresAt,
+        remainingMs,
+        isExpired,
+        autoSuspend: w.autoSuspend,
+        status: w.status,
+        appealText: w.appealText,
+        appealPhotos: w.appealPhotos,
+        appealedAt: w.appealedAt,
+        resolvedAt: w.resolvedAt,
+        resolvedBy: w.resolvedBy,
+        resolutionNote: w.resolutionNote,
+        createdAt: w.createdAt,
+        snapshot,
+        currentName,
+        currentPhotos,
+        nameChanged,
+        photosChanged,
+      };
+    });
+  }
+
+  async resolveWarning(
+    warningId: string,
+    adminId: string,
+    action: 'DISMISS' | 'SUSPEND' | 'EXTEND',
+    note?: string
+  ) {
+    const warning = await prisma.adminWarning.findUnique({
+      where: { id: warningId },
+    });
+
+    if (!warning) throw new Error('Warning not found');
+
+    if (action === 'DISMISS') {
+      await prisma.adminWarning.update({
+        where: { id: warningId },
+        data: {
+          status: 'DISMISSED',
+          resolvedAt: new Date(),
+          resolvedBy: adminId,
+          resolutionNote: note || 'Warning dismissed/cleared by admin.',
+        },
+      });
+
+      await prisma.activityLog.create({
+        data: {
+          userId: warning.userId,
+          adminId,
+          action: 'ADMIN_DISMISS_WARNING',
+          details: JSON.stringify({ warningId, note }),
+        },
+      });
+    } else if (action === 'SUSPEND') {
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: warning.userId },
+          data: { status: UserStatus.SUSPENDED },
+        }),
+        prisma.adminWarning.update({
+          where: { id: warningId },
+          data: {
+            status: 'SUSPENDED',
+            resolvedAt: new Date(),
+            resolvedBy: adminId,
+            resolutionNote: note || 'User suspended by admin following warning review.',
+          },
+        }),
+      ]);
+
+      await prisma.activityLog.create({
+        data: {
+          userId: warning.userId,
+          adminId,
+          action: 'ADMIN_SUSPEND_VIA_WARNING',
+          details: JSON.stringify({ warningId, note }),
+        },
+      });
+    } else if (action === 'EXTEND') {
+      const newExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await prisma.adminWarning.update({
+        where: { id: warningId },
+        data: {
+          expiresAt: newExpiresAt,
+          status: 'ACTIVE',
+          resolutionNote: note || 'Deadline extended by 24 hours by admin.',
+        },
+      });
+
+      await prisma.activityLog.create({
+        data: {
+          userId: warning.userId,
+          adminId,
+          action: 'ADMIN_EXTEND_WARNING',
+          details: JSON.stringify({ warningId, newExpiresAt, note }),
+        },
+      });
+    }
+
+    return { success: true };
+  }
 }

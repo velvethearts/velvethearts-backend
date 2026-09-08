@@ -441,4 +441,81 @@ export class AdminController {
       return res.status(500).json({ success: false, message: error.message || 'Creating demo verification failed' });
     }
   };
+
+  // ============================================
+  // ADMIN WARNING ENDPOINTS
+  // ============================================
+
+  issueWarning = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { userId } = req.params;
+      const { violationType, message, deadlineHours, autoSuspend } = req.body;
+
+      if (!message || !message.trim()) {
+        return res.status(400).json({ success: false, message: 'Warning message is required' });
+      }
+
+      const warning = await this.adminService.issueWarning(userId, req.user.userId, {
+        violationType: violationType || 'POLICY',
+        message: message.trim(),
+        deadlineHours: deadlineHours ? Number(deadlineHours) : 24,
+        autoSuspend: autoSuspend !== undefined ? Boolean(autoSuspend) : true,
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: warning,
+        message: 'Warning successfully issued to user',
+      });
+    } catch (error: any) {
+      logger.error('issueWarning controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Issuing warning failed' });
+    }
+  };
+
+  getWarnings = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { status } = req.query;
+      const statusFilter = typeof status === 'string' && status !== 'ALL' ? status : undefined;
+      const warnings = await this.adminService.getWarnings(statusFilter);
+
+      return res.status(200).json({
+        success: true,
+        data: warnings,
+      });
+    } catch (error: any) {
+      logger.error('getWarnings controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Retrieving warnings failed' });
+    }
+  };
+
+  resolveWarning = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const { warningId } = req.params;
+      const { action, note } = req.body;
+
+      if (!action || !['DISMISS', 'SUSPEND', 'EXTEND'].includes(action)) {
+        return res.status(400).json({ success: false, message: 'Valid action (DISMISS, SUSPEND, EXTEND) is required' });
+      }
+
+      await this.adminService.resolveWarning(warningId, req.user.userId, action, note);
+
+      return res.status(200).json({
+        success: true,
+        message: `Warning action "${action}" applied successfully`,
+      });
+    } catch (error: any) {
+      logger.error('resolveWarning controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Resolving warning failed' });
+    }
+  };
 }
+
