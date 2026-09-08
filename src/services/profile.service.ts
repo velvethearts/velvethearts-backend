@@ -106,9 +106,23 @@ export class ProfileService {
     const y = parseInt(String(data.dobYear), 10);
     const dob = new Date(y, m - 1, d);
 
-    const hasApprovedVerification = await prisma.verificationRequest.findFirst({
+    const latestApprovedVerification = await prisma.verificationRequest.findFirst({
       where: { userId, status: 'APPROVED' },
+      orderBy: { createdAt: 'desc' },
     });
+
+    // Check if the current primary photo matches the approved verification photo
+    const currentPrimaryPhoto = data.photos?.[0] || null;
+    let isVerified = false;
+
+    if (latestApprovedVerification && currentPrimaryPhoto) {
+      if (latestApprovedVerification.referenceUrl) {
+        // Must match the exact photo that was approved
+        isVerified = currentPrimaryPhoto === latestApprovedVerification.referenceUrl;
+      } else {
+        isVerified = true;
+      }
+    }
 
     await prisma.$transaction(async (tx) => {
       const profile = await tx.profile.upsert({
@@ -135,7 +149,7 @@ export class ProfileService {
           education: data.education || null,
           occupation: data.occupation || null,
           isPaused: data.isPaused !== undefined ? data.isPaused : undefined,
-          ...(hasApprovedVerification ? { verified: true } : { verified: false }),
+          verified: isVerified,
         },
         create: {
           userId,
@@ -160,7 +174,7 @@ export class ProfileService {
           education: data.education || null,
           occupation: data.occupation || null,
           isPaused: data.isPaused ?? false,
-          verified: Boolean(hasApprovedVerification),
+          verified: isVerified,
         },
       });
 
