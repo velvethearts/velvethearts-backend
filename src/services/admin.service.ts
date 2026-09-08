@@ -587,6 +587,12 @@ export class AdminService {
   }
 
   async suspendUser(userId: string, adminId: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('User not found');
+    if (user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN) {
+      throw new Error('Admin accounts cannot be suspended');
+    }
+
     await prisma.user.update({
       where: { id: userId },
       data: { status: UserStatus.SUSPENDED },
