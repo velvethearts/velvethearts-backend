@@ -135,7 +135,7 @@ export class ProfileService {
           education: data.education || null,
           occupation: data.occupation || null,
           isPaused: data.isPaused !== undefined ? data.isPaused : undefined,
-          ...(typeof data.verified === 'boolean' ? { verified: data.verified } : (isFirstTimeCompletion && hasApprovedVerification ? { verified: true } : {})),
+          ...(hasApprovedVerification ? { verified: true } : { verified: false }),
         },
         create: {
           userId,
@@ -160,7 +160,7 @@ export class ProfileService {
           education: data.education || null,
           occupation: data.occupation || null,
           isPaused: data.isPaused ?? false,
-          verified: Boolean(hasApprovedVerification) || (typeof data.verified === 'boolean' ? data.verified : false),
+          verified: Boolean(hasApprovedVerification),
         },
       });
 
@@ -377,28 +377,59 @@ export class ProfileService {
     return settings;
   }
 
-  async verifyUserPhoto(userId: string, data: { selfie: string; poseId?: string }) {
+  async verifyUserPhoto(userId: string, data: { selfie: string; poseId?: string; referenceUrl?: string }) {
     try {
       const existingProfile = await prisma.profile.findFirst({
         where: {
           OR: [{ userId }, { id: userId }],
         },
+        include: { photos: { orderBy: { photoOrder: 'asc' }, take: 1 } },
       });
 
-      if (existingProfile) {
-        const updated = await prisma.profile.update({
-          where: { id: existingProfile.id },
-          data: { verified: true },
+      const referenceUrl = data.referenceUrl || (existingProfile as any)?.photos?.[0]?.secureUrl || undefined;
+
+      // Check if there's already a pending request for this user
+      const existingPending = await prisma.verificationRequest.findFirst({
+        where: { userId, status: 'PENDING' },
+      });
+
+      let requestId: string;
+
+      if (existingPending) {
+        const updated = await prisma.verificationRequest.update({
+          where: { id: existingPending.id },
+          data: {
+            selfieUrl: data.selfie,
+            referenceUrl: referenceUrl || existingPending.referenceUrl,
+          },
         });
-        logger.info(`[ProfileService] User ${userId} completed photo verification with ${data?.poseId || 'biometric'} (profile ${updated.id})`);
-        return { verified: updated.verified };
+        requestId = updated.id;
+        logger.info(`[ProfileService] User ${userId} updated pending verification request (${requestId})`);
+      } else {
+        const request = await prisma.verificationRequest.create({
+          data: {
+            userId,
+            selfieUrl: data.selfie,
+            referenceUrl: referenceUrl || null,
+          },
+        });
+        requestId = request.id;
+        logger.info(`[ProfileService] User ${userId} submitted verification request for admin review (${requestId})`);
       }
 
-      logger.info(`[ProfileService] User ${userId} verified photo during onboarding (pose ${data?.poseId || 'biometric'})`);
-      return { verified: true };
+      return {
+        verified: false,
+        status: 'PENDING',
+        requestId,
+        message: 'Verification selfie submitted. An administrator will review your photo shortly.',
+      };
     } catch (err: any) {
       logger.warn(`[ProfileService] verifyUserPhoto warning: ${err.message}`);
-      return { verified: true };
+      return {
+        verified: false,
+        status: 'PENDING',
+        message: 'Verification request queued for admin review.',
+      };
     }
   }
 

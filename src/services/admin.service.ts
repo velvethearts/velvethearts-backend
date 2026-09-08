@@ -791,14 +791,21 @@ export class AdminService {
     if (!request) throw new Error('Verification request not found');
     if (request.status !== 'PENDING') throw new Error('Request already reviewed');
 
-    await prisma.verificationRequest.update({
-      where: { id: requestId },
-      data: {
-        status: VerificationRequestStatus.REJECTED,
-        reviewedBy: adminId,
-        reviewedAt: new Date(),
-        adminNotes: notes || null,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.verificationRequest.update({
+        where: { id: requestId },
+        data: {
+          status: VerificationRequestStatus.REJECTED,
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          adminNotes: notes || null,
+        },
+      });
+
+      await tx.profile.updateMany({
+        where: { userId: request.userId },
+        data: { verified: false },
+      });
     });
 
     await this.logRepository.create({

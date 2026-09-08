@@ -25,6 +25,10 @@ const envSchema = z.object({
   VAPID_SUBJECT: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   MESSAGE_ENCRYPTION_KEY: z.string().optional(),
+  JWT_ACCESS_SECRET: z.string().default('velvet-hearts-jwt-access-secret-default-key'),
+  JWT_ACCESS_EXPIRY: z.string().default('15m'),
+  JWT_REFRESH_SECRET: z.string().default('velvet-hearts-jwt-refresh-secret-default-key'),
+  JWT_REFRESH_EXPIRY: z.string().default('7d'),
 });
 
 const parsed = envSchema.safeParse(process.env);
