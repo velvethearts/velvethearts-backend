@@ -393,7 +393,7 @@ export class AdminService {
     return {
       users: users.map(u => {
         const photoUrls = u.profile?.photos?.map((p: any) => p?.secureUrl || p) || [];
-        const isVerified = Boolean(u.profile?.verified || (u.verificationRequests && u.verificationRequests.length > 0));
+        const isVerified = u.profile ? Boolean(u.profile.verified) : Boolean(u.verificationRequests && u.verificationRequests.length > 0);
         return {
           id: u.id,
           email: u.email,
@@ -450,32 +450,43 @@ export class AdminService {
       });
     }
 
-    // Update any existing verification requests for this user
-    const existingReq = await prisma.verificationRequest.findFirst({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (existingReq) {
-      await prisma.verificationRequest.update({
-        where: { id: existingReq.id },
-        data: {
-          status: verified ? VerificationRequestStatus.APPROVED : VerificationRequestStatus.REJECTED,
-          reviewedBy: adminId,
-          reviewedAt: new Date(),
-          adminNotes: verified ? 'Verified by admin' : 'Unverified by admin',
-        },
+    if (verified) {
+      const existingReq = await prisma.verificationRequest.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
       });
-    } else if (verified) {
-      // Pre-approve verification request for onboarding user
-      await prisma.verificationRequest.create({
+
+      if (existingReq) {
+        await prisma.verificationRequest.updateMany({
+          where: { userId },
+          data: {
+            status: VerificationRequestStatus.APPROVED,
+            reviewedBy: adminId,
+            reviewedAt: new Date(),
+            adminNotes: 'Verified directly by admin in Admin Panel',
+          },
+        });
+      } else {
+        await prisma.verificationRequest.create({
+          data: {
+            userId,
+            selfieUrl: '',
+            status: VerificationRequestStatus.APPROVED,
+            reviewedBy: adminId,
+            reviewedAt: new Date(),
+            adminNotes: 'Verified directly by admin in Admin Panel',
+          },
+        });
+      }
+    } else {
+      // Mark all verification requests as REJECTED so no old approved request lingers
+      await prisma.verificationRequest.updateMany({
+        where: { userId },
         data: {
-          userId,
-          selfieUrl: '',
-          status: VerificationRequestStatus.APPROVED,
+          status: VerificationRequestStatus.REJECTED,
           reviewedBy: adminId,
           reviewedAt: new Date(),
-          adminNotes: 'Verified directly by admin in Admin Panel',
+          adminNotes: 'Unverified by admin',
         },
       });
     }
@@ -694,7 +705,7 @@ export class AdminService {
 
     return requests.map(r => {
       const photoUrls = r.user?.profile?.photos?.map((p: any) => p?.secureUrl || p) || [];
-      const isVerified = Boolean(r.user?.profile?.verified || r.status === 'APPROVED');
+      const isVerified = r.user?.profile ? Boolean(r.user.profile.verified) : (r.status === 'APPROVED');
       return {
         id: r.id,
         userId: r.userId,
