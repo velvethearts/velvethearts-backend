@@ -20,7 +20,21 @@ export function calculateProfileCompletion(profile: any): number {
   if (!profile) return 0;
   let score = 0;
   
-  if (profile.photos && profile.photos.length > 0) score += 20;
+  // Photo depth scoring: rewards adding slots 1-6 as promised in marketing
+  const photoCount = profile.photos?.length || 0;
+  if (photoCount >= 1) score += 20; // Primary photo baseline
+  if (photoCount >= 2) score += 10; // Hobby/activity photo (+60% more views)
+  if (photoCount >= 3) score += 15; // Travel/adventure photo (+80% more replies / 4.2x)
+  if (photoCount >= 4) score += 10; // Candid moment (4.2x more interactions)
+  if (photoCount >= 5) score += 5;  // Dressed-up photo (Stand out in feed)
+  if (photoCount >= 6) score += 5;  // Full 6-photo gallery completion
+
+  // Voice Intro: 30-sec audio intro (delivering on "3x profile visits")
+  if (profile.voiceIntroUrl) score += 25;
+
+  // Verified Rosette: Biometric face verification trust boost
+  if (profile.verified) score += 20;
+
   if (profile.story && profile.story.length >= 20) score += 20;
   if (profile.promptAnswers && profile.promptAnswers.length > 0) score += 15;
   if (profile.interests && profile.interests.length >= 3) score += 10;
@@ -240,6 +254,8 @@ export class DiscoverService {
         distanceKm: distInfo.distanceKm,
         isSameState: distInfo.isSameState,
         createdAt: u.createdAt,
+        boostedUntil: prof.boostedUntil ? prof.boostedUntil.toISOString() : null,
+        isBoosted: prof.boostedUntil ? new Date(prof.boostedUntil).getTime() > Date.now() : false,
       };
     });
 
@@ -257,16 +273,42 @@ export class DiscoverService {
       }
     }
 
+    const nowTime = Date.now();
+    const isProfileBoosted = (c: any) => {
+      if (!c.boostedUntil) return false;
+      return new Date(c.boostedUntil).getTime() > nowTime;
+    };
+
     // Apply sorting
     if (sortBy === 'newest') {
-      mapped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      mapped.sort((a, b) => {
+        const aBoost = isProfileBoosted(a) ? 1 : 0;
+        const bBoost = isProfileBoosted(b) ? 1 : 0;
+        if (aBoost !== bBoost) return bBoost - aBoost;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
     } else if (sortBy === 'profileCompletion') {
-      mapped.sort((a, b) => b.profileCompletion - a.profileCompletion);
+      mapped.sort((a, b) => {
+        const aBoost = isProfileBoosted(a) ? 1 : 0;
+        const bBoost = isProfileBoosted(b) ? 1 : 0;
+        if (aBoost !== bBoost) return bBoost - aBoost;
+        return b.profileCompletion - a.profileCompletion;
+      });
     } else if (sortBy === 'name') {
-      mapped.sort((a, b) => a.name.localeCompare(b.name));
+      mapped.sort((a, b) => {
+        const aBoost = isProfileBoosted(a) ? 1 : 0;
+        const bBoost = isProfileBoosted(b) ? 1 : 0;
+        if (aBoost !== bBoost) return bBoost - aBoost;
+        return a.name.localeCompare(b.name);
+      });
     } else {
-      // Default: mix of complete profiles and newest
-      mapped.sort((a, b) => b.profileCompletion - a.profileCompletion || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      // Default: 1. Active Spotlight Boosted -> 2. High Profile Completion (photos + voice + verification) -> 3. Newest
+      mapped.sort((a, b) => {
+        const aBoost = isProfileBoosted(a) ? 1 : 0;
+        const bBoost = isProfileBoosted(b) ? 1 : 0;
+        if (aBoost !== bBoost) return bBoost - aBoost;
+        return b.profileCompletion - a.profileCompletion || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
     }
 
     // Apply Pagination

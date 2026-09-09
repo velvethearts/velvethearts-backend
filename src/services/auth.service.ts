@@ -215,6 +215,20 @@ export class AuthService {
       this.sendWelcomeEmailSafely(user.id, user.email, firebaseUser.name, isReturningUser);
     }
 
+    // Broadcast new registration to admins in real-time
+    try {
+      const { io } = await import('../socket');
+      if (io) {
+        io.to('admins').emit('user_registered', {
+          userId: user.id,
+          isReturningUser,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (socketErr) {
+      console.warn('[AuthService] Failed emitting user_registered socket event:', socketErr);
+    }
+
     return user;
   }
 }

@@ -49,6 +49,21 @@ export class MatchService {
       return { match: false, message: 'Profile already liked' };
     }
 
+    // Verify 5 Super-Hearts daily quota if sending Super Spark
+    if (isSuper) {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const usedCount = await prisma.like.count({
+        where: {
+          senderId,
+          isSuper: true,
+          createdAt: { gte: oneDayAgo },
+        },
+      });
+      if (usedCount >= 5) {
+        throw new Error('DAILY_SUPER_HEARTS_EXCEEDED: You have used all 5 of your daily Super-Hearts. They replenish every 24 hours.');
+      }
+    }
+
     // Run matching logic in a transaction
     const result = await prisma.$transaction(async (tx) => {
       // 1. Save Like with optional comment
@@ -567,5 +582,34 @@ export class MatchService {
         voiceIntroUrl: prof.voiceIntroUrl || null,
       };
     });
+  }
+
+  async getSuperSparksQuota(userId: string) {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const usedLikes = await prisma.like.findMany({
+      where: {
+        senderId: userId,
+        isSuper: true,
+        createdAt: { gte: oneDayAgo },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true },
+    });
+
+    const total = 5;
+    const used = usedLikes.length;
+    const remaining = Math.max(0, total - used);
+
+    let nextReplenishAt: Date | null = null;
+    if (usedLikes.length > 0) {
+      nextReplenishAt = new Date(new Date(usedLikes[0].createdAt).getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    return {
+      total,
+      used,
+      remaining,
+      nextReplenishAt: nextReplenishAt ? nextReplenishAt.toISOString() : null,
+    };
   }
 }

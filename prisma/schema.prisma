@@ -85,8 +85,11 @@ model Profile {
   photos             Photo[]
   user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   promptAnswers      PromptAnswer[]
+  boostedUntil       DateTime?
+  lastBoostedAt      DateTime?
 
   @@index([city, gender, relationshipIntent])
+  @@index([boostedUntil])
 }
 
 model Photo {

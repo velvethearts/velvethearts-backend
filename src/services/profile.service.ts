@@ -299,6 +299,19 @@ export class ProfileService {
 
     await this.userRepository.delete(userId);
 
+    // Notify admins in real time via Socket.IO
+    try {
+      const { io } = await import('../socket');
+      if (io) {
+        io.to('admins').emit('user_account_deleted', {
+          userId,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (socketErr) {
+      logger.warn('[ProfileService] Failed emitting user_account_deleted socket event:', socketErr);
+    }
+
     return { success: true };
   }
 
@@ -536,5 +549,114 @@ export class ProfileService {
     }
 
     return latest;
+  }
+
+  async activateBoost(userId: string) {
+    const profile = await prisma.profile.findUnique({
+      where: { userId },
+      select: { id: true, boostedUntil: true, lastBoostedAt: true },
+    });
+
+    if (!profile) {
+      throw new Error('Profile not found.');
+    }
+
+    const BOOST_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+    const BOOST_COOLDOWN_MS = 48 * 60 * 60 * 1000; // 48 hours
+    const now = Date.now();
+
+    // Check if on active boost
+    if (profile.boostedUntil && new Date(profile.boostedUntil).getTime() > now) {
+      const boostSecondsLeft = Math.max(0, Math.floor((new Date(profile.boostedUntil).getTime() - now) / 1000));
+      return {
+        isBoosting: true,
+        isOnCooldown: false,
+        boostSecondsLeft,
+        cooldownSecondsLeft: Math.max(0, Math.floor((new Date(profile.lastBoostedAt || profile.boostedUntil).getTime() + BOOST_COOLDOWN_MS - now) / 1000)),
+        boostExpiresAt: new Date(profile.boostedUntil).getTime(),
+        cooldownExpiresAt: new Date(profile.lastBoostedAt || profile.boostedUntil).getTime() + BOOST_COOLDOWN_MS,
+      };
+    }
+
+    // Check if on cooldown
+    if (profile.lastBoostedAt) {
+      const cooldownExpiresAt = new Date(profile.lastBoostedAt).getTime() + BOOST_COOLDOWN_MS;
+      if (now < cooldownExpiresAt) {
+        const cooldownSecondsLeft = Math.max(0, Math.floor((cooldownExpiresAt - now) / 1000));
+        throw new Error(`BOOST_ON_COOLDOWN: Spotlight Boost is on cooldown. Ready in ${Math.ceil(cooldownSecondsLeft / 3600)} hours.`);
+      }
+    }
+
+    const boostedUntil = new Date(now + BOOST_DURATION_MS);
+    const lastBoostedAt = new Date(now);
+
+    await prisma.profile.update({
+      where: { userId },
+      data: {
+        boostedUntil,
+        lastBoostedAt,
+      },
+    });
+
+    return {
+      isBoosting: true,
+      isOnCooldown: false,
+      boostSecondsLeft: Math.floor(BOOST_DURATION_MS / 1000),
+      cooldownSecondsLeft: Math.floor(BOOST_COOLDOWN_MS / 1000),
+      boostExpiresAt: boostedUntil.getTime(),
+      cooldownExpiresAt: now + BOOST_COOLDOWN_MS,
+    };
+  }
+
+  async getBoostStatus(userId: string) {
+    const profile = await prisma.profile.findUnique({
+      where: { userId },
+      select: { boostedUntil: true, lastBoostedAt: true },
+    });
+
+    if (!profile) {
+      return {
+        isBoosting: false,
+        isOnCooldown: false,
+        boostSecondsLeft: 0,
+        cooldownSecondsLeft: 0,
+        boostExpiresAt: null,
+        cooldownExpiresAt: null,
+      };
+    }
+
+    const BOOST_COOLDOWN_MS = 48 * 60 * 60 * 1000;
+    const now = Date.now();
+    const boostExpiresAt = profile.boostedUntil ? new Date(profile.boostedUntil).getTime() : null;
+    const cooldownExpiresAt = profile.lastBoostedAt ? new Date(profile.lastBoostedAt).getTime() + BOOST_COOLDOWN_MS : null;
+
+    if (boostExpiresAt && now < boostExpiresAt) {
+      return {
+        isBoosting: true,
+        isOnCooldown: false,
+        boostSecondsLeft: Math.max(0, Math.floor((boostExpiresAt - now) / 1000)),
+        cooldownSecondsLeft: cooldownExpiresAt ? Math.max(0, Math.floor((cooldownExpiresAt - now) / 1000)) : 0,
+        boostExpiresAt,
+        cooldownExpiresAt,
+      };
+    } else if (cooldownExpiresAt && now < cooldownExpiresAt) {
+      return {
+        isBoosting: false,
+        isOnCooldown: true,
+        boostSecondsLeft: 0,
+        cooldownSecondsLeft: Math.max(0, Math.floor((cooldownExpiresAt - now) / 1000)),
+        boostExpiresAt,
+        cooldownExpiresAt,
+      };
+    } else {
+      return {
+        isBoosting: false,
+        isOnCooldown: false,
+        boostSecondsLeft: 0,
+        cooldownSecondsLeft: 0,
+        boostExpiresAt: null,
+        cooldownExpiresAt: null,
+      };
+    }
   }
 }

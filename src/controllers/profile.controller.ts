@@ -220,4 +220,42 @@ export class ProfileController {
       return res.status(500).json({ success: false, message: 'Retrieving verification status failed' });
     }
   };
+
+  activateBoost = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const result = await this.profileService.activateBoost(req.user.userId);
+      return res.status(200).json({
+        success: true,
+        message: 'Spotlight Boost activated successfully! Your profile is now prioritized across discovery.',
+        data: result,
+      });
+    } catch (error: any) {
+      if (error.message && error.message.startsWith('BOOST_ON_COOLDOWN')) {
+        return res.status(429).json({ success: false, message: error.message });
+      }
+      logger.error('activateBoost controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Activating boost failed' });
+    }
+  };
+
+  getBoostStatus = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const status = await this.profileService.getBoostStatus(req.user.userId);
+      return res.status(200).json({
+        success: true,
+        data: status,
+      });
+    } catch (error: any) {
+      logger.error('getBoostStatus controller failure:', error);
+      return res.status(500).json({ success: false, message: 'Retrieving boost status failed' });
+    }
+  };
 }

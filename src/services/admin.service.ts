@@ -194,13 +194,17 @@ export class AdminService {
     const deletedCount = await prisma.user.count({ where: { status: UserStatus.DELETED } });
     const reportsCount = await prisma.report.count({ where: { status: ReportStatus.PENDING } });
     const verificationPendingCount = await prisma.verificationRequest.count({ where: { status: VerificationRequestStatus.PENDING } });
-    const userCount = await prisma.user.count({ where: { role: Role.USER } });
     const adminCount = await prisma.user.count({ where: { role: { in: [Role.ADMIN, Role.SUPER_ADMIN] } } });
     const approvedCount = await prisma.user.count({ where: { approvalStatus: ApprovalStatus.APPROVED } });
     const rejectedCount = await prisma.user.count({ where: { approvalStatus: ApprovalStatus.REJECTED } });
     const verifiedCount = await prisma.profile.count({ where: { verified: true } });
     const completedProfileCount = await prisma.user.count({ where: { profile: { isNot: null } } });
     const incompleteProfileCount = await prisma.user.count({ where: { profile: null } });
+
+    // Unique lifetime members: counts first-time user records (excludes re-registration rows where previousUserId is set)
+    const uniqueUserCount = await prisma.user.count({ where: { previousUserId: null, role: Role.USER } });
+    // Active returning / resurrected members: users who had previously deleted their account and returned
+    const returningCount = await prisma.user.count({ where: { previousUserId: { not: null }, status: UserStatus.ACTIVE } });
 
     const recentRegistrations = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
@@ -226,8 +230,11 @@ export class AdminService {
         reportsCount,
         verificationPendingCount,
         verifiedCount,
-        totalCount: activeCount + suspendedCount + deletedCount,
-        userCount,
+        totalCount: uniqueUserCount, // Truly unique lifetime individuals
+        uniqueUserCount,
+        returningCount,
+        rawAccountsCount: activeCount + suspendedCount + deletedCount,
+        userCount: uniqueUserCount,
         adminCount,
         approvedCount,
         rejectedCount,
@@ -244,6 +251,8 @@ export class AdminService {
           role: r.role,
           approvalStatus: r.approvalStatus,
           status: r.status,
+          previousUserId: r.previousUserId,
+          isReturning: Boolean(r.previousUserId),
           createdAt: r.createdAt,
           name: r.profile?.name || r.name || null,
           hasProfile: Boolean(r.profile),
@@ -401,6 +410,8 @@ export class AdminService {
           role: u.role,
           approvalStatus: u.approvalStatus,
           status: u.status,
+          previousUserId: u.previousUserId,
+          isReturning: Boolean(u.previousUserId),
           createdAt: u.createdAt,
           name: u.profile?.name || u.name || null,
           hasProfile: Boolean(u.profile),

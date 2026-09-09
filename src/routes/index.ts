@@ -71,6 +71,8 @@ router.post('/profile', requireAuth, profileMutationLimiter, profileCtrl.savePro
 router.post('/profile/verify-photo', requireAuth, photoVerifyRateLimiter, profileCtrl.verifyPhoto);
 router.post('/profile/verify-manual', requireAuth, photoVerifyRateLimiter, profileCtrl.submitManualVerification);
 router.get('/profile/verification-status', requireAuth, searchDiscoverRateLimiter, profileCtrl.getVerificationStatus);
+router.post('/profile/boost', requireAuth, profileMutationLimiter, profileCtrl.activateBoost);
+router.get('/profile/boost-status', requireAuth, searchDiscoverRateLimiter, profileCtrl.getBoostStatus);
 router.delete('/profile', requireAuth, accountDeleteLimiter, profileCtrl.deleteAccount);
 
 // ==========================================
@@ -91,6 +93,7 @@ router.post('/match/unmatch', requireAuth, likeRateLimiter, matchCtrl.unmatch);
 router.get('/match/connections', requireAuth, matchCtrl.getConnections);
 router.get('/match/received-invites', requireAuth, matchCtrl.getReceivedInvites);
 router.get('/match/sent-invites', requireAuth, matchCtrl.getSentInvites);
+router.get('/match/super-sparks-quota', requireAuth, searchDiscoverRateLimiter, matchCtrl.getSuperSparksQuota);
 
 // ==========================================
 // REWIND LETTER ROUTES

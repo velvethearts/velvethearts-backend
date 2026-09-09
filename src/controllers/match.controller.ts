@@ -41,8 +41,11 @@ export class MatchController {
         data,
       });
     } catch (error: any) {
+      if (error.message && error.message.startsWith('DAILY_SUPER_HEARTS_EXCEEDED')) {
+        return res.status(429).json({ success: false, code: 'DAILY_SUPER_HEARTS_EXCEEDED', message: error.message });
+      }
       logger.error('Like profile controller failure:', error);
-      return res.status(500).json({ success: false, message: 'Liking profile failed' });
+      return res.status(500).json({ success: false, message: error.message || 'Liking profile failed' });
     }
   };
 
@@ -145,6 +148,23 @@ export class MatchController {
     } catch (error: any) {
       logger.error('getSentInvites controller failure:', error);
       return res.status(500).json({ success: false, message: 'Retrieving sent invites failed' });
+    }
+  };
+
+  getSuperSparksQuota = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required' });
+      }
+
+      const quota = await this.matchService.getSuperSparksQuota(req.user.userId);
+      return res.status(200).json({
+        success: true,
+        data: quota,
+      });
+    } catch (error: any) {
+      logger.error('getSuperSparksQuota controller failure:', error);
+      return res.status(500).json({ success: false, message: 'Retrieving quota failed' });
     }
   };
 }
