@@ -431,6 +431,59 @@ export class AdminService {
     };
   }
 
+  async getUserById(userId: string) {
+    const u = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        profile: {
+          include: {
+            photos: {
+              orderBy: { photoOrder: 'asc' },
+            },
+            promptAnswers: true,
+          },
+        },
+        verificationRequests: {
+          where: { status: 'APPROVED' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!u) return null;
+
+    const photoUrls = u.profile?.photos?.map((p: any) => p?.secureUrl || p) || [];
+    const isVerified = u.profile ? Boolean(u.profile.verified) : Boolean(u.verificationRequests && u.verificationRequests.length > 0);
+
+    return {
+      id: u.id,
+      email: u.email,
+      phoneNumber: u.phoneNumber,
+      role: u.role,
+      approvalStatus: u.approvalStatus,
+      status: u.status,
+      createdAt: u.createdAt,
+      name: u.profile?.name || u.name || null,
+      hasProfile: Boolean(u.profile),
+      city: u.profile?.city || null,
+      verified: isVerified,
+      photos: photoUrls,
+      profile: u.profile ? {
+        ...u.profile,
+        id: u.profile.id,
+        userId: u.id,
+        name: u.profile.name || u.name,
+        email: u.email,
+        phoneNumber: u.phoneNumber,
+        role: u.role,
+        status: u.status,
+        verified: isVerified,
+        photos: photoUrls,
+        promptAnswers: u.profile.promptAnswers || [],
+      } : null,
+    };
+  }
+
   async toggleUserVerification(userId: string, adminId: string, verified: boolean) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -1105,6 +1158,33 @@ export class AdminService {
         currentPhotos,
         nameChanged,
         photosChanged,
+        user: w.user ? {
+          id: w.user.id,
+          name: currentName,
+          email: w.user.email,
+          phoneNumber: w.user.phoneNumber,
+          role: w.user.role,
+          status: w.user.status,
+          approvalStatus: w.user.approvalStatus,
+          createdAt: w.user.createdAt,
+          verified: Boolean(w.user.profile?.verified),
+          avatarUrl: currentPhotos[0] || null,
+          photos: currentPhotos,
+          hasProfile: Boolean(w.user.profile),
+          profile: w.user.profile ? {
+            ...w.user.profile,
+            id: w.user.profile.id,
+            userId: w.user.id,
+            name: currentName,
+            email: w.user.email,
+            phoneNumber: w.user.phoneNumber,
+            role: w.user.role,
+            status: w.user.status,
+            verified: Boolean(w.user.profile.verified),
+            photos: currentPhotos,
+            promptAnswers: (w.user.profile as any).promptAnswers || [],
+          } : null,
+        } : null,
       };
     });
   }

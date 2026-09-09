@@ -215,6 +215,28 @@ export class AdminController {
     }
   };
 
+  getUserById = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { userId } = req.params;
+      if (!userId) {
+        return res.status(400).json({ success: false, message: 'User ID parameter is required' });
+      }
+
+      const user = await this.adminService.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: user,
+      });
+    } catch (error: any) {
+      logger.error('getUserById controller failure:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Fetching user failed' });
+    }
+  };
+
   createAdmin = async (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!req.user) {

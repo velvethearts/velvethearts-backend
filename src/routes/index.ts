@@ -170,6 +170,7 @@ router.get('/admin/users/pending', requireAuth, requireRole(['ADMIN', 'SUPER_ADM
 router.post('/admin/users/:userId/approve', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.approve);
 router.post('/admin/users/:userId/reject', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.reject);
 router.get('/admin/users/history', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getPhoneHistory);
+router.get('/admin/users/:userId', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getUserById);
 router.get('/admin/reports', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getReports);
 router.post('/admin/reports/:reportId/close', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.closeReport);
 router.get('/admin/logs', requireAuth, requireRole(['ADMIN', 'SUPER_ADMIN']), adminActionLimiter, adminCtrl.getAuditLogs);
