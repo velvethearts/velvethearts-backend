@@ -8,9 +8,12 @@ import { PushService } from './push.service';
 import { RewindLetterService } from './rewind-letter.service';
 import { DiaryService } from './diary.service';
 
+import { BlockRepository } from '../repositories/block.repository';
+
 export class MatchService {
   private likeRepository = new LikeRepository();
   private matchRepository = new MatchRepository();
+  private blockRepository = new BlockRepository();
   private logRepository = new ActivityLogRepository();
   private pushService = new PushService();
   private rewindLetterService = new RewindLetterService();
@@ -354,12 +357,16 @@ export class MatchService {
   }
 
   async getConnections(userId: string) {
-    const activeMatches = await this.matchRepository.findActiveMatchesByUser(userId);
+    const [activeMatches, blockedUserIdsList] = await Promise.all([
+      this.matchRepository.findActiveMatchesByUser(userId),
+      this.blockRepository.findBlockedUserIds(userId),
+    ]);
+    const blockedUserIds = new Set(blockedUserIdsList);
 
     return activeMatches
       .filter((m) => {
         const partner = m.user1Id === userId ? m.user2 : m.user1;
-        return partner && partner.status === UserStatus.ACTIVE && partner.profile;
+        return partner && partner.status === UserStatus.ACTIVE && partner.profile && !blockedUserIds.has(partner.id);
       })
       .map((m) => {
         const partner = m.user1Id === userId ? m.user2 : m.user1;

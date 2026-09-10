@@ -71,9 +71,16 @@ export class ChatService {
 
     const partner = conversation.participants.find((p) => p.userId !== userId);
     if (partner) {
-      const blockedUserIds = new Set(await this.blockRepository.findBlockedUserIds(userId));
+      const [blockedUserIdsList, partnerUser] = await Promise.all([
+        this.blockRepository.findBlockedUserIds(userId),
+        prisma.user.findUnique({ where: { id: partner.userId }, select: { status: true } }),
+      ]);
+      const blockedUserIds = new Set(blockedUserIdsList);
       if (blockedUserIds.has(partner.userId)) {
         throw new Error('Cannot access chat with a blocked user');
+      }
+      if (!partnerUser || partnerUser.status !== 'ACTIVE') {
+        throw new Error('This account is no longer active');
       }
     }
 
@@ -111,9 +118,16 @@ export class ChatService {
 
     const partner = conversation.participants.find((p) => p.userId !== senderId);
     if (partner) {
-      const blockedUserIds = new Set(await this.blockRepository.findBlockedUserIds(senderId));
+      const [blockedUserIdsList, partnerUser] = await Promise.all([
+        this.blockRepository.findBlockedUserIds(senderId),
+        prisma.user.findUnique({ where: { id: partner.userId }, select: { status: true } }),
+      ]);
+      const blockedUserIds = new Set(blockedUserIdsList);
       if (blockedUserIds.has(partner.userId)) {
         throw new Error('Cannot send messages to a blocked user');
+      }
+      if (!partnerUser || partnerUser.status !== 'ACTIVE') {
+        throw new Error('This account is no longer active');
       }
     }
 
