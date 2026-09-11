@@ -111,6 +111,7 @@ export class AuthService {
         user = await prisma.user.update({
           where: { id: user.id },
           data: updates,
+          include: { profile: true },
         });
       }
 
@@ -132,6 +133,7 @@ export class AuthService {
         user = await prisma.user.update({
           where: { id: user.id },
           data: { welcomeEmailSent: true },
+          include: { profile: true },
         });
       }
 
