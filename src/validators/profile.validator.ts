@@ -17,7 +17,7 @@ const saveProfileSchemaBase = z.object({
   dobDay: z.coerce.number().min(1).max(31),
   dobMonth: z.coerce.number().min(1).max(12),
   dobYear: z.coerce.number().min(1900).max(new Date().getFullYear()),
-  city: z.string().min(2, 'City must be at least 2 characters').max(100, 'City must be 100 characters or less'),
+  city: z.string().min(2, 'City/Location must be at least 2 characters').max(100, 'City/Location must be 100 characters or less'),
   gender: z.string().max(50),
   showGender: z.boolean().optional().default(true),
   orientation: z.string().max(50),
