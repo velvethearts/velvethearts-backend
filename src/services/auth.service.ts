@@ -10,6 +10,7 @@ import { ApprovalStatus, Role, User, UserStatus } from '@prisma/client';
 interface FirebaseUserInfo {
   uid: string;
   email?: string;
+  emailVerified?: boolean;
   name?: string;
   picture?: string;
   phoneNumber?: string;
@@ -23,7 +24,7 @@ export class AuthService {
 
   private async verifyFirebaseIdToken(firebaseIdToken: string): Promise<FirebaseUserInfo> {
     if (firebaseIdToken.startsWith('dev-google:')) {
-      if (env.NODE_ENV === 'production' || !env.ENABLE_DEV_AUTH) {
+      if (env.NODE_ENV !== 'development' || !env.ENABLE_DEV_AUTH) {
         throw new Error('Development authentication is disabled');
       }
       const email = firebaseIdToken.replace('dev-google:', '').trim();
@@ -33,6 +34,7 @@ export class AuthService {
       return {
         uid: `dev_uid_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
         email: email,
+        emailVerified: true,
         name: 'Dev User',
       };
     }
@@ -41,6 +43,7 @@ export class AuthService {
     return {
       uid: decoded.uid,
       email: decoded.email?.trim(),
+      emailVerified: Boolean(decoded.email_verified),
       name: decoded.name,
       picture: decoded.picture,
       phoneNumber: decoded.phone_number?.trim(),
@@ -71,7 +74,8 @@ export class AuthService {
 
     let user = await this.userRepository.findByFirebaseUid(firebaseUser.uid);
 
-    if (!user && firebaseUser.email) {
+    // [SEC-01 FIX] Only link existing accounts if the identity provider confirmed email ownership
+    if (!user && firebaseUser.email && firebaseUser.emailVerified) {
       const existingUser = await prisma.user.findFirst({
         where: {
           email: firebaseUser.email,

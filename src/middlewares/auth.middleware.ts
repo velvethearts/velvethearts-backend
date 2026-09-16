@@ -27,9 +27,9 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     let user: any = null;
 
     if (token.startsWith('dev-google:')) {
-      // Dev tokens are strictly disallowed in production or when ENABLE_DEV_AUTH is false
-      if (env.NODE_ENV === 'production' || !env.ENABLE_DEV_AUTH) {
-        logger.warn('dev-google token rejected in production or when dev auth disabled');
+      // Dev tokens are strictly disallowed outside development or when ENABLE_DEV_AUTH is false
+      if (env.NODE_ENV !== 'development' || !env.ENABLE_DEV_AUTH) {
+        logger.warn('dev-google token rejected outside development or when dev auth disabled');
         return res.status(401).json({ success: false, message: 'Invalid or expired access token' });
       }
 

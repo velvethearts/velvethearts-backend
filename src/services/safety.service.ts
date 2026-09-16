@@ -149,7 +149,7 @@ export class SafetyService {
 
       await prisma.like.upsert({
         where: { senderId_receiverId: { senderId: blockedId, receiverId: blockerId } },
-        create: { senderId: blockedId, receiverId: blockedId },
+        create: { senderId: blockedId, receiverId: blockerId },
         update: {},
       });
     }

@@ -79,7 +79,7 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string | st
       let user: any = null;
 
       if (token.startsWith('dev-google:')) {
-        if (env.NODE_ENV === 'production' || !env.ENABLE_DEV_AUTH) {
+        if (env.NODE_ENV !== 'development' || !env.ENABLE_DEV_AUTH) {
           return next(new Error('Invalid or expired authentication token'));
         }
         const email = token.replace('dev-google:', '').trim();
@@ -115,7 +115,7 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string | st
 
   const userSocketCounts = new Map<string, number>();
 
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     const userId = socket.data.userId;
     socket.join(userId);
     logger.debug(`User ${userId} joined personal room`);
@@ -129,13 +129,37 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string | st
     const currentCount = userSocketCounts.get(userId) || 0;
     userSocketCounts.set(userId, currentCount + 1);
 
-    if (currentCount === 0) {
-      io.emit('user_presence', { userId, isOnline: true });
+    // [SEC-03 FIX] Scope presence notifications to conversation partners instead of broadcasting globally
+    let partnerIds: string[] = [];
+    try {
+      const userConvs = await prisma.conversationParticipant.findMany({
+        where: { userId },
+        select: {
+          conversation: {
+            select: {
+              participants: {
+                where: { userId: { not: userId } },
+                select: { userId: true },
+              },
+            },
+          },
+        },
+      });
+      partnerIds = Array.from(new Set(
+        userConvs.flatMap(c => c.conversation.participants.map(p => p.userId))
+      ));
+    } catch (e: any) {
+      logger.warn(`Could not resolve partner IDs for presence tracking: ${e?.message || e}`);
     }
 
-    const onlineUserList = Array.from(userSocketCounts.keys());
-    socket.emit('online_users', onlineUserList);
-    io.emit('online_users', onlineUserList);
+    if (currentCount === 0) {
+      for (const partnerId of partnerIds) {
+        io.to(partnerId).emit('user_presence', { userId, isOnline: true });
+      }
+    }
+
+    const onlinePartners = partnerIds.filter(id => userSocketCounts.has(id));
+    socket.emit('online_users', onlinePartners);
 
     logger.info(`Socket client connected: ${userId} (${socket.id})`);
 
@@ -175,9 +199,10 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string | st
       }
     });
 
-    // [C-2 FIX] Handle typing start — rate limited
+    // [C-2 FIX] Handle typing start — rate limited and room-verified
     socket.on('typing_start', (conversationId: string) => {
       if (!conversationId) return;
+      if (!socket.rooms.has(conversationId)) return;
       if (!checkEventRate(socket.id, 'typing_start', 120)) return;
 
       socket.to(conversationId).emit('typing', {
@@ -187,9 +212,10 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string | st
       });
     });
 
-    // [C-2 FIX] Handle typing stop — rate limited
+    // [C-2 FIX] Handle typing stop — rate limited and room-verified
     socket.on('typing_stop', (conversationId: string) => {
       if (!conversationId) return;
+      if (!socket.rooms.has(conversationId)) return;
       if (!checkEventRate(socket.id, 'typing_stop', 120)) return;
 
       socket.to(conversationId).emit('typing', {
@@ -220,8 +246,10 @@ export function initSocketServer(httpServer: HttpServer, corsOrigin: string | st
       const count = userSocketCounts.get(userId) || 1;
       if (count <= 1) {
         userSocketCounts.delete(userId);
-        io.emit('user_presence', { userId, isOnline: false });
-        io.emit('online_users', Array.from(userSocketCounts.keys()));
+        // [SEC-03 FIX] Notify partners only
+        for (const partnerId of partnerIds) {
+          io.to(partnerId).emit('user_presence', { userId, isOnline: false });
+        }
       } else {
         userSocketCounts.set(userId, count - 1);
       }

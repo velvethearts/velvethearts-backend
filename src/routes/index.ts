@@ -18,7 +18,7 @@ import { DiaryController } from '../controllers/diary.controller';
 import { WarningController } from '../controllers/warning.controller';
 
 // Middlewares
-import { requireAuth, requireRole } from '../middlewares/auth.middleware';
+import { requireAuth, requireRole, requireApproved } from '../middlewares/auth.middleware';
 import { 
   authRateLimiter, 
   photoVerifyRateLimiter,
@@ -38,7 +38,8 @@ import {
 } from '../middlewares/rate-limiter.middleware';
 
 const router = Router();
-const upload = multer({ limits: { fileSize: 100 * 1024 * 1024 } }); // 100MB limit for 1-2 min HD/4K videos and photos
+// [SEC-04 FIX] Reduce Multer memory buffering limit to 25MB to prevent memory exhaustion DoS
+const upload = multer({ limits: { fileSize: 25 * 1024 * 1024 } });
 
 const authCtrl = new AuthController();
 const profileCtrl = new ProfileController();
@@ -76,43 +77,44 @@ router.get('/profile/boost-status', requireAuth, searchDiscoverRateLimiter, prof
 router.delete('/profile', requireAuth, accountDeleteLimiter, profileCtrl.deleteAccount);
 
 // ==========================================
-// DISCOVER & SEARCH ROUTES
 // ==========================================
-router.get('/discover', requireAuth, searchDiscoverRateLimiter, discoverCtrl.getRecommendations);
+// DISCOVER & SEARCH ROUTES (Approved members only)
+// ==========================================
+router.get('/discover', requireAuth, requireApproved, searchDiscoverRateLimiter, discoverCtrl.getRecommendations);
 
 // Internal cron endpoint for discover nudges (protected by x-cron-secret header)
 router.post('/internal/cron/discover-nudge', searchDiscoverRateLimiter, discoverCtrl.runDiscoverNudge);
-router.get('/search', requireAuth, searchDiscoverRateLimiter, searchCtrl.search);
+router.get('/search', requireAuth, requireApproved, searchDiscoverRateLimiter, searchCtrl.search);
 
 // ==========================================
-// MATCH ROUTES
+// MATCH ROUTES (Approved members only)
 // ==========================================
-router.post('/match/like', requireAuth, likeRateLimiter, matchCtrl.like);
-router.post('/match/unlike', requireAuth, likeRateLimiter, matchCtrl.unlike);
-router.post('/match/unmatch', requireAuth, likeRateLimiter, matchCtrl.unmatch);
-router.get('/match/connections', requireAuth, matchCtrl.getConnections);
-router.get('/match/received-invites', requireAuth, matchCtrl.getReceivedInvites);
-router.get('/match/sent-invites', requireAuth, matchCtrl.getSentInvites);
-router.get('/match/super-sparks-quota', requireAuth, searchDiscoverRateLimiter, matchCtrl.getSuperSparksQuota);
+router.post('/match/like', requireAuth, requireApproved, likeRateLimiter, matchCtrl.like);
+router.post('/match/unlike', requireAuth, requireApproved, likeRateLimiter, matchCtrl.unlike);
+router.post('/match/unmatch', requireAuth, requireApproved, likeRateLimiter, matchCtrl.unmatch);
+router.get('/match/connections', requireAuth, requireApproved, matchCtrl.getConnections);
+router.get('/match/received-invites', requireAuth, requireApproved, matchCtrl.getReceivedInvites);
+router.get('/match/sent-invites', requireAuth, requireApproved, matchCtrl.getSentInvites);
+router.get('/match/super-sparks-quota', requireAuth, requireApproved, searchDiscoverRateLimiter, matchCtrl.getSuperSparksQuota);
 
 // ==========================================
-// REWIND LETTER ROUTES
+// REWIND LETTER ROUTES (Approved members only)
 // ==========================================
-router.post('/rewind-letter', requireAuth, rewindLetterLimiter, rewindLetterCtrl.write);
-router.put('/rewind-letter/:matchId', requireAuth, rewindLetterLimiter, rewindLetterCtrl.edit);
-router.delete('/rewind-letter/:matchId', requireAuth, rewindLetterLimiter, rewindLetterCtrl.delete);
-router.patch('/rewind-letter/:matchId/schedule', requireAuth, rewindLetterLimiter, rewindLetterCtrl.updateSchedule);
-router.get('/rewind-letter/:matchId/status', requireAuth, rewindLetterCtrl.getStatus);
-router.get('/rewind-letter/:matchId/content', requireAuth, rewindLetterCtrl.getDelivered);
+router.post('/rewind-letter', requireAuth, requireApproved, rewindLetterLimiter, rewindLetterCtrl.write);
+router.put('/rewind-letter/:matchId', requireAuth, requireApproved, rewindLetterLimiter, rewindLetterCtrl.edit);
+router.delete('/rewind-letter/:matchId', requireAuth, requireApproved, rewindLetterLimiter, rewindLetterCtrl.delete);
+router.patch('/rewind-letter/:matchId/schedule', requireAuth, requireApproved, rewindLetterLimiter, rewindLetterCtrl.updateSchedule);
+router.get('/rewind-letter/:matchId/status', requireAuth, requireApproved, rewindLetterCtrl.getStatus);
+router.get('/rewind-letter/:matchId/content', requireAuth, requireApproved, rewindLetterCtrl.getDelivered);
 
 // ==========================================
-// OUR DIARY ROUTES
+// OUR DIARY ROUTES (Approved members only)
 // ==========================================
-router.get('/diary/:matchId', requireAuth, chatRateLimiter, diaryCtrl.getEntries);
-router.post('/diary/:matchId/message', requireAuth, chatRateLimiter, diaryCtrl.saveMessage);
-router.post('/diary/:matchId/note', requireAuth, chatRateLimiter, diaryCtrl.addNote);
-router.post('/diary/:matchId/photo', requireAuth, uploadRateLimiter, upload.single('photo'), diaryCtrl.uploadPhoto);
-router.delete('/diary/:matchId/:entryId', requireAuth, chatRateLimiter, diaryCtrl.deleteEntry);
+router.get('/diary/:matchId', requireAuth, requireApproved, chatRateLimiter, diaryCtrl.getEntries);
+router.post('/diary/:matchId/message', requireAuth, requireApproved, chatRateLimiter, diaryCtrl.saveMessage);
+router.post('/diary/:matchId/note', requireAuth, requireApproved, chatRateLimiter, diaryCtrl.addNote);
+router.post('/diary/:matchId/photo', requireAuth, requireApproved, uploadRateLimiter, upload.single('photo'), diaryCtrl.uploadPhoto);
+router.delete('/diary/:matchId/:entryId', requireAuth, requireApproved, chatRateLimiter, diaryCtrl.deleteEntry);
 
 // ==========================================
 // SAFETY ROUTES (BLOCK & REPORT)
@@ -124,18 +126,18 @@ router.get('/safety/blocked', requireAuth, safetyCtrl.getBlockedUsers);
 router.post('/safety/reports', requireAuth, reportRateLimiter, safetyCtrl.report);
 
 // ==========================================
-// CHAT & MESSAGING ROUTES
+// CHAT & MESSAGING ROUTES (Approved members only)
 // ==========================================
-router.get('/chat/conversations', requireAuth, chatCtrl.getConversations);
-router.get('/chat/conversations/:conversationId/messages', requireAuth, chatCtrl.getMessages);
-router.post('/chat/conversations/:conversationId/messages', requireAuth, chatRateLimiter, chatCtrl.sendMessage);
-router.delete('/chat/conversations/:conversationId/messages', requireAuth, chatRateLimiter, chatCtrl.deleteConversationMessages);
-router.put('/chat/messages/:messageId', requireAuth, chatRateLimiter, chatCtrl.editMessage);
-router.delete('/chat/messages/:messageId', requireAuth, chatRateLimiter, chatCtrl.deleteMessage);
-router.post('/chat/conversations/:conversationId/seen', requireAuth, typingRateLimiter, chatCtrl.markSeen);
-router.post('/chat/conversations/:conversationId/delivered', requireAuth, typingRateLimiter, chatCtrl.markDelivered);
-router.post('/chat/conversations/:conversationId/typing', requireAuth, typingRateLimiter, chatCtrl.postTyping);
-router.get('/chat/conversations/:conversationId/typing', requireAuth, typingRateLimiter, chatCtrl.getTyping);
+router.get('/chat/conversations', requireAuth, requireApproved, chatCtrl.getConversations);
+router.get('/chat/conversations/:conversationId/messages', requireAuth, requireApproved, chatCtrl.getMessages);
+router.post('/chat/conversations/:conversationId/messages', requireAuth, requireApproved, chatRateLimiter, chatCtrl.sendMessage);
+router.delete('/chat/conversations/:conversationId/messages', requireAuth, requireApproved, chatRateLimiter, chatCtrl.deleteConversationMessages);
+router.put('/chat/messages/:messageId', requireAuth, requireApproved, chatRateLimiter, chatCtrl.editMessage);
+router.delete('/chat/messages/:messageId', requireAuth, requireApproved, chatRateLimiter, chatCtrl.deleteMessage);
+router.post('/chat/conversations/:conversationId/seen', requireAuth, requireApproved, typingRateLimiter, chatCtrl.markSeen);
+router.post('/chat/conversations/:conversationId/delivered', requireAuth, requireApproved, typingRateLimiter, chatCtrl.markDelivered);
+router.post('/chat/conversations/:conversationId/typing', requireAuth, requireApproved, typingRateLimiter, chatCtrl.postTyping);
+router.get('/chat/conversations/:conversationId/typing', requireAuth, requireApproved, typingRateLimiter, chatCtrl.getTyping);
 
 // ==========================================
 // UPLOAD ROUTE
