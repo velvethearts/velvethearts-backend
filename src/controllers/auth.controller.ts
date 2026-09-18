@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service';
 import { firebaseLoginSchema } from '../validators/auth.validator';
 import { logger } from '../utils/logger';
+import { sanitizeErrorMessage } from '../utils/errorSanitizer';
 
 export class AuthController {
   private authService = new AuthService();
@@ -25,9 +26,15 @@ export class AuthController {
       });
     } catch (error: any) {
       logger.error('Firebase login controller failure:', error);
-      return res.status(401).json({
+      
+      const safeMessage = sanitizeErrorMessage(
+        error,
+        'Authentication failed. Please try again after a while.'
+      );
+
+      return res.status(500).json({
         success: false,
-        message: error?.message || 'Authentication failed. Please check your credentials.',
+        message: safeMessage,
       });
     }
   };

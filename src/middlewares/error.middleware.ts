@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
+import { sanitizeErrorMessage } from '../utils/errorSanitizer';
 
 export function errorHandler(
   error: Error,
@@ -14,13 +15,16 @@ export function errorHandler(
   });
 
   const statusCode = res.statusCode !== 200 ? res.statusCode : 500;
-  
-  // [M-3 FIX] Mask raw error messages in production to prevent information leakage
   const isProduction = process.env.NODE_ENV === 'production';
+
+  // Sanitize the error message so database and internal details are never leaked
+  const userSafeMessage = isProduction 
+    ? 'An unexpected error occurred. Please try again after a while.' 
+    : sanitizeErrorMessage(error);
 
   res.status(statusCode).json({
     success: false,
-    message: isProduction ? 'An internal server error occurred' : (error.message || 'An internal server error occurred'),
+    message: userSafeMessage,
     stack: isProduction ? undefined : error.stack,
   });
 }
